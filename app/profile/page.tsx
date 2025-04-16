@@ -3,12 +3,10 @@ import { useEffect, useState } from "react";
 import { auth, db } from "@/app/firebase/firebaseConfig";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { User, updateEmail } from "firebase/auth";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
 // Country code data (ISO 3166-1 alpha-2)
 const countryCodes = [
   { code: "US", name: "United States", dialCode: "+1", flag: "🇺🇸" },
