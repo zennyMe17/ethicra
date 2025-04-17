@@ -4,9 +4,10 @@ import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { getAuth, onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { app } from '@/app/firebase/firebaseConfig'; // Assuming your Firebase config is here
+import { app, db } from '@/app/firebase/firebaseConfig'; // Assuming your Firebase config is here
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaUserCircle, FaCog, FaSignOutAlt, FaChevronDown, FaChevronUp } from 'react-icons/fa';
+import { FaUserCircle, FaCog, FaSignOutAlt, FaChevronDown, FaChevronUp, FaHome, FaUser, FaTachometerAlt } from 'react-icons/fa';
+import { doc, getDoc } from 'firebase/firestore';
 
 const dropdownVariants = {
   initial: { opacity: 0, y: -10, scale: 0.95 },
@@ -22,13 +23,25 @@ const Navbar = () => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const auth = getAuth(app);
+  const [displayName, setDisplayName] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      if (currentUser) {
+        const userRef = doc(db, "users", currentUser.uid);
+        const docSnap = await getDoc(userRef);
+        if (docSnap.exists()) {
+          setDisplayName(docSnap.data()?.name || currentUser.displayName || currentUser.email?.split('@')[0] || 'Account');
+        } else {
+          setDisplayName(currentUser.displayName || currentUser.email?.split('@')[0] || 'Account');
+        }
+      } else {
+        setDisplayName(null);
+      }
     });
 
-    return () => unsubscribe(); // Cleanup listener on unmount
+    return () => unsubscribeAuth(); // Cleanup listener on unmount
   }, [auth]);
 
   useEffect(() => {
@@ -115,7 +128,7 @@ const Navbar = () => {
               >
                 <FaUserCircle size={28} className="text-gray-500" />
                 <span className="text-sm font-semibold text-gray-700 hidden sm:block">
-                  {user.displayName || user.email?.split('@')[0] || 'Account'}
+                  {displayName}
                 </span>
                 {isDropdownOpen ? <FaChevronUp className="text-gray-500" /> : <FaChevronDown className="text-gray-500" />}
               </button>
@@ -129,10 +142,16 @@ const Navbar = () => {
                     animate="animate"
                     exit="exit"
                   >
-                    <Link href="/dashboard" className="block px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors duration-150">
+                    <Link href="/" className="block px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors duration-150 flex items-center gap-2">
+                      <FaHome className="text-gray-500" size={16} />
+                      Home
+                    </Link>
+                    <Link href="/dashboard" className="block px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors duration-150 flex items-center gap-2">
+                      <FaTachometerAlt className="text-gray-500" size={16} />
                       Dashboard
                     </Link>
-                    <Link href="/profile" className="block px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors duration-150">
+                    <Link href="/profile" className="block px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors duration-150 flex items-center gap-2">
+                      <FaUser className="text-gray-500" size={16} />
                       Profile
                     </Link>
                     <div className="border-t border-gray-200 my-1"></div>

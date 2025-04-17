@@ -1,8 +1,13 @@
+"use client" 
 import React from 'react';
 import Link from 'next/link';
-import { FaFacebook, FaTwitter, FaInstagram } from 'react-icons/fa';
+import { FaFacebook, FaTwitter, FaInstagram, FaSignOutAlt, FaInfoCircle, FaEnvelope, FaUserPlus, FaSignInAlt, FaUserShield } from 'react-icons/fa';
+import { auth } from '@/app/firebase/firebaseConfig';
+import { useAuthState } from 'react-firebase-hooks/auth';
 
 const Footer: React.FC = () => {
+  const [user] = useAuthState(auth);
+
   return (
     <footer className="bg-white border-t border-gray-200 py-8 flex flex-col items-center font-sans mb-10">
       <div className="w-full max-w-7xl flex justify-between mb-8">
@@ -27,9 +32,49 @@ const Footer: React.FC = () => {
           </div>
         </div>
         <div className="flex flex-col items-end w-2/5">
-          <Link href="/sign-up" className="bg-[#4A3AFF] text-white py-2 px-5 rounded mb-2 w-[130px] h-[40px] flex items-center justify-center hover:bg-[#6357FF] transition-colors duration-200">Register</Link>
-          <Link href="/login" className="border border-[#4A3AFF] text-[#4A3AFF] py-2 px-5 rounded mb-2 w-[130px] h-[40px] flex items-center justify-center hover:bg-[#F0EDFF] hover:text-[#6357FF] transition-colors duration-200">Log in</Link>
-          <Link href="/admin" className="border border-[#4A3AFF] text-[#4A3AFF] py-2 px-5 rounded w-[130px] h-[40px] flex items-center justify-center hover:bg-[#F0EDFF] hover:text-[#6357FF] transition-colors duration-200">ADMIN</Link>
+          {user ? (
+            <>
+              <Link
+                href="/contact"
+                className="border border-[#4A3AFF] text-[#4A3AFF] py-2 px-5 rounded mb-2 w-[130px] h-[40px] flex items-center justify-center hover:bg-[#F0EDFF] hover:text-[#6357FF] transition-colors duration-200"
+              >
+                <FaEnvelope className="mr-2" /> Contact
+              </Link>
+              <Link
+                href="/about"
+                className="border border-[#4A3AFF] text-[#4A3AFF] py-2 px-5 rounded mb-2 w-[130px] h-[40px] flex items-center justify-center hover:bg-[#F0EDFF] hover:text-[#6357FF] transition-colors duration-200"
+              >
+                <FaInfoCircle className="mr-2" /> About
+              </Link>
+              <button
+                onClick={() => auth.signOut()}
+                className="border border-red-500 text-red-500 py-2 px-5 rounded w-[130px] h-[40px] flex items-center justify-center hover:bg-red-50 hover:text-red-600 transition-colors duration-200 focus:outline-none"
+              >
+                <FaSignOutAlt className="mr-2" /> Logout
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/sign-up"
+                className="border border-[#4A3AFF] text-[#4A3AFF] py-2 px-5 rounded mb-2 w-[130px] h-[40px] flex items-center justify-center hover:bg-[#F0EDFF] hover:text-[#6357FF] transition-colors duration-200"
+              >
+                <FaUserPlus className="mr-2" /> Register
+              </Link>
+              <Link
+                href="/login"
+                className="border border-[#4A3AFF] text-[#4A3AFF] py-2 px-5 rounded mb-2 w-[130px] h-[40px] flex items-center justify-center hover:bg-[#F0EDFF] hover:text-[#6357FF] transition-colors duration-200"
+              >
+                <FaSignInAlt className="mr-2" /> Log in
+              </Link>
+              <Link
+                href="/admin"
+                className="border border-[#4A3AFF] text-[#4A3AFF] py-2 px-5 rounded w-[130px] h-[40px] flex items-center justify-center hover:bg-[#F0EDFF] hover:text-[#6357FF] transition-colors duration-200"
+              >
+                <FaUserShield className="mr-2" /> ADMIN
+              </Link>
+            </>
+          )}
         </div>
       </div>
       <hr className="w-full border-t border-gray-200 mb-4" />
