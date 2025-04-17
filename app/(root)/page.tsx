@@ -2,8 +2,27 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '@/app/firebase/firebaseConfig';
 
 const Page = () => {
+  const [userCount, setUserCount] = useState<number | string>(0);
+
+  useEffect(() => {
+    const fetchUserCount = async () => {
+      try {
+        const usersCollection = collection(db, 'users');
+        const usersSnapshot = await getDocs(usersCollection);
+        setUserCount(usersSnapshot.size);
+      } catch (error) {
+        console.error("Error fetching user count:", error);
+        setUserCount('-');
+      }
+    };
+
+    fetchUserCount();
+  }, []);
 
   return (
     <div>
@@ -13,7 +32,7 @@ const Page = () => {
           <h1 className="text-7xl font-bold text-black mb-4">Take Online Interview.</h1>
           <p className="text-gray-950 text-2xl mt-4 mb-2">NUMBER OF ACTIVE USERS RIGHT NOW</p>
           <p className="text-4xl text-blue-600 font-semibold mx-48">
-            200+
+            {userCount}+
           </p>
         </div>
         <div>
@@ -117,7 +136,7 @@ const Page = () => {
 
           {/* 1. Text Div */}
           <div className="mb-8 md:mb-12">
-            <p className="text-[#6757C1] text-4xl md:text-[40px] font-medium  mb-4">You’re in good Hand!</p>
+            <p className="text-[#6757C1] text-4xl md:text-[40px] font-medium  mb-4">You’re in good Hand!</p>
             <p className='text-2xl md:text-[30px] leading-snug font-bold'>By choosing Ethicra, you gain a trusted career partner with a proven track record of connecting top talent with the right opportunities.</p>
           </div>
 
