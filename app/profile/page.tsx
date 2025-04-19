@@ -2,11 +2,12 @@
 import { useEffect, useState } from "react";
 import { auth, db } from "@/app/firebase/firebaseConfig";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { User, updateEmail } from "firebase/auth";
+import { User, updateEmail, onAuthStateChanged } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useRouter } from "next/navigation";
 
 // Country code data (ISO 3166-1 alpha-2)
 const countryCodes = [
@@ -76,16 +77,42 @@ export default function ProfilePage() {
   });
   const [loading, setLoading] = useState<boolean>(true);
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  const router = useRouter();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isUser, setIsUser] = useState<boolean>(false); // New state to track if it's a regular user
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      setLoading(true); // Set loading to true before checking role
+
+      if (user) {
+        try {
+          const userRef = doc(db, "users", user.uid);
+          const userSnap = await getDoc(userRef);
+          setIsUser(userSnap.exists());
+        } catch (error) {
+          console.error("Error checking user role:", error);
+          setIsUser(false);
+        }
+      } else {
+        setIsUser(false);
+      }
+      setLoading(false); // Set loading to false after checking role
+    });
+
+    return () => unsubscribe();
+  }, [router]);
 
   useEffect(() => {
     const fetchData = async () => {
-      try {
-        const currentUser: User | null = auth.currentUser;
-        if (!currentUser) {
-          setLoading(false);
-          return;
+      if (!currentUser || !isUser) {
+        if (!loading) {
+          router.push("/unauthorized"); // Redirect if not a regular user and not loading
         }
-
+        return;
+      }
+      try {
         const userRef = doc(db, "users", currentUser.uid);
         const snap = await getDoc(userRef);
 
@@ -103,21 +130,23 @@ export default function ProfilePage() {
             },
           });
         } else {
-          console.log("No such document!");
+          console.log("No such user document!");
+          // Handle the case where the user is logged in but has no 'users' document
+          // Maybe redirect to a setup page or show an error.
+          router.push("/unauthorized"); // Redirect as they should have a user profile
         }
       } catch (error) {
         console.error("Error fetching user data:", error);
         alert("Failed to load profile data. Please try again.");
-      } finally {
-        setLoading(false);
       }
     };
 
-    fetchData();
-  }, []);
+    if (!loading && currentUser && isUser) {
+      fetchData();
+    }
+  }, [currentUser, router, loading, isUser]);
 
   const handleUpdate = async () => {
-    const currentUser = auth.currentUser;
     if (!currentUser) return;
 
     const userRef = doc(db, "users", currentUser.uid);
@@ -150,7 +179,17 @@ export default function ProfilePage() {
     setIsEditing(true);
   };
 
-  if (loading) return <div className="flex justify-center items-center h-screen"><p className="text-lg text-gray-700">Loading profile data...</p></div>;
+  if (loading) return <div className="flex justify-center items-center h-screen"><p className="text-lg text-gray-700">Checking authentication and user status...</p></div>;
+
+  if (!currentUser) {
+    router.push("/login");
+    return null;
+  }
+
+  if (!isUser) {
+    router.push("/unauthorized");
+    return null;
+  }
 
   return (
     <div className="bg-[#FAFAFC] py-10">

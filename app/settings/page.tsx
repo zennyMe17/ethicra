@@ -1,21 +1,24 @@
 "use client";
-import { useState } from "react";
-import { auth } from "@/app/firebase/firebaseConfig";
+import { useState, useEffect } from "react";
+import { auth, db } from "@/app/firebase/firebaseConfig"; // Import db
 import {
   updatePassword,
   deleteUser,
   reauthenticateWithCredential,
   EmailAuthProvider,
+  onAuthStateChanged,
+  User,
 } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
-import { LockClosedIcon, TrashIcon } from '@heroicons/react/24/solid'; // Ensure you have Heroicons v2 installed
+import { LockClosedIcon, TrashIcon } from '@heroicons/react/24/solid';
+import { doc, getDoc } from "firebase/firestore"; // Import Firestore functions
 
 const SettingsPage = () => {
-  const [activeTab, setActiveTab] = useState("password"); // Default active tab
+  const [activeTab, setActiveTab] = useState("password");
   const [newPassword, setNewPassword] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
@@ -23,16 +26,42 @@ const SettingsPage = () => {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { addToast } = useToast();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isUser, setIsUser] = useState<boolean>(false); // State to track if it's a regular user
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      setAuthLoading(true); // Set loading before checking role
+
+      if (user) {
+        try {
+          const userRef = doc(db, "users", user.uid);
+          const userSnap = await getDoc(userRef);
+          setIsUser(userSnap.exists());
+        } catch (error) {
+          console.error("Error checking user role:", error);
+          setIsUser(false);
+        }
+      } else {
+        setIsUser(false);
+      }
+      setAuthLoading(false); // Set loading after checking role
+    });
+
+    return () => unsubscribe();
+  }, [router]);
 
   const userHasPassword = () => {
-    return auth.currentUser?.providerData.some(
+    return currentUser?.providerData.some(
       (provider) => provider.providerId === "password"
     );
   };
 
   const handleChangePassword = async () => {
-    if (!auth.currentUser) {
-      addToast("No user logged in.");
+    if (!currentUser || !isUser) {
+      addToast("Unauthorized action.");
       return;
     }
 
@@ -59,11 +88,11 @@ const SettingsPage = () => {
     setLoading(true);
     try {
       const credential = EmailAuthProvider.credential(
-        auth.currentUser.email!,
+        currentUser.email!,
         currentPassword
       );
-      await reauthenticateWithCredential(auth.currentUser, credential);
-      await updatePassword(auth.currentUser, newPassword);
+      await reauthenticateWithCredential(currentUser, credential);
+      await updatePassword(currentUser, newPassword);
       addToast("Your password has been updated successfully.");
       setNewPassword("");
       setCurrentPassword("");
@@ -76,8 +105,8 @@ const SettingsPage = () => {
   };
 
   const handleDeleteAccount = async () => {
-    if (!auth.currentUser) {
-      addToast("No user logged in.");
+    if (!currentUser || !isUser) {
+      addToast("Unauthorized action.");
       return;
     }
 
@@ -95,20 +124,18 @@ const SettingsPage = () => {
     try {
       if (userHasPassword()) {
         const credential = EmailAuthProvider.credential(
-          auth.currentUser.email!,
+          currentUser.email!,
           currentPassword
         );
-        await reauthenticateWithCredential(auth.currentUser, credential);
+        await reauthenticateWithCredential(currentUser, credential);
       } else {
         // For passwordless users, we might need a different approach for verification
-        // such as prompting them to sign in again or using a recent sign-in.
-        // For this example, we'll just proceed without password reauthentication.
-        // **WARNING:** This might have security implications. Consider more robust verification.
+        // **WARNING:** Consider more robust verification.
         addToast("Account deletion initiated. Please wait...");
       }
-      await deleteUser(auth.currentUser);
+      await deleteUser(currentUser);
       addToast("Your account has been deleted successfully.");
-      router.push("/"); // Redirect to home page after deletion
+      router.push("/");
     } catch (error) {
       console.error("Error deleting account:", error);
       addToast("Account deletion failed. Please try again or contact support.");
@@ -119,6 +146,20 @@ const SettingsPage = () => {
     }
   };
 
+  if (authLoading) {
+    return <div className="flex justify-center items-center h-screen"><p className="text-lg text-gray-700">Checking authentication...</p></div>;
+  }
+
+  if (!currentUser) {
+    router.push("/login");
+    return null;
+  }
+
+  if (!isUser) {
+    router.push("/unauthorized");
+    return null;
+  }
+
   return (
     <div className="bg-gray-100 py-12">
       <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-md overflow-hidden md:flex mt-20 mb-20">
@@ -128,18 +169,16 @@ const SettingsPage = () => {
           <div className="space-y-2">
             <button
               onClick={() => setActiveTab("password")}
-              className={`w-full text-left py-2 px-4 rounded-md hover:bg-gray-100 focus:outline-none focus:bg-gray-100 flex items-center ${
-                activeTab === "password" ? "bg-gray-200 font-semibold text-indigo-600" : "text-gray-600"
-              }`}
+              className={`w-full text-left py-2 px-4 rounded-md hover:bg-gray-100 focus:outline-none focus:bg-gray-100 flex items-center ${activeTab === "password" ? "bg-gray-200 font-semibold text-indigo-600" : "text-gray-600"
+                }`}
             >
               <LockClosedIcon className="w-5 h-5 mr-2" aria-hidden="true" />
               Change Password
             </button>
             <button
               onClick={() => setActiveTab("delete")}
-              className={`w-full text-left py-2 px-4 rounded-md hover:bg-gray-100 focus:outline-none focus:bg-gray-100 flex items-center ${
-                activeTab === "delete" ? "bg-gray-200 font-semibold text-red-600" : "text-red-500"
-              }`}
+              className={`w-full text-left py-2 px-4 rounded-md hover:bg-gray-100 focus:outline-none focus:bg-gray-100 flex items-center ${activeTab === "delete" ? "bg-gray-200 font-semibold text-red-600" : "text-red-500"
+                }`}
             >
               <TrashIcon className="w-5 h-5 mr-2" aria-hidden="true" />
               Delete Account

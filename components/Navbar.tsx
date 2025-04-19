@@ -17,31 +17,38 @@ const dropdownVariants = {
 
 const Navbar = () => {
   const pathname = usePathname();
-  const [activeTab, setActiveTab] = useState(pathname); // Initialize with the current path
-  const [user, setUser] = useState<User | null>(null); // State to track logged-in user
+  const [activeTab, setActiveTab] = useState(pathname);
+  const [user, setUser] = useState<User | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const auth = getAuth(app);
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false); // State to track if the user is an admin
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      setIsAdmin(false); // Reset isAdmin on auth change
+      setDisplayName(null);
+
       if (currentUser) {
         const userRef = doc(db, "users", currentUser.uid);
-        const docSnap = await getDoc(userRef);
-        if (docSnap.exists()) {
-          setDisplayName(docSnap.data()?.name || currentUser.displayName || currentUser.email?.split('@')[0] || 'Account');
+        const adminRef = doc(db, "admins", currentUser.uid); // Reference to the admins collection
+
+        const [userSnap, adminSnap] = await Promise.all([getDoc(userRef), getDoc(adminRef)]);
+
+        if (userSnap.exists()) {
+          setDisplayName(userSnap.data()?.name || currentUser.displayName || currentUser.email?.split('@')[0] || 'Account');
         } else {
           setDisplayName(currentUser.displayName || currentUser.email?.split('@')[0] || 'Account');
         }
-      } else {
-        setDisplayName(null);
+
+        setIsAdmin(adminSnap.exists()); // Check if an admin document exists for the user
       }
     });
 
-    return () => unsubscribeAuth(); // Cleanup listener on unmount
+    return () => unsubscribeAuth();
   }, [auth]);
 
   useEffect(() => {
@@ -70,10 +77,9 @@ const Navbar = () => {
     try {
       await signOut(auth);
       console.log('User signed out');
-      router.push('/'); // Redirect to home or login page after logout
+      router.push('/');
     } catch (error) {
       console.error('Error signing out:', error);
-      // Handle logout error (e.g., display a message)
     }
   };
 
@@ -120,7 +126,7 @@ const Navbar = () => {
           )}
 
           {user ? (
-            // Stylish Profile Dropdown
+            // Profile Dropdown
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={toggleDropdown}
@@ -142,36 +148,59 @@ const Navbar = () => {
                     animate="animate"
                     exit="exit"
                   >
-                    <Link href="/" className="block px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors duration-150 flex items-center gap-2">
-                      <FaHome className="text-gray-500" size={16} />
-                      Home
-                    </Link>
-                    <Link href="/dashboard" className="block px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors duration-150 flex items-center gap-2">
-                      <FaTachometerAlt className="text-gray-500" size={16} />
-                      Dashboard
-                    </Link>
-                    <Link href="/profile" className="block px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors duration-150 flex items-center gap-2">
-                      <FaUser className="text-gray-500" size={16} />
-                      Profile
-                    </Link>
-                    <div className="border-t border-gray-200 my-1"></div>
-                    <Link href="/settings" className="block px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors duration-150 flex items-center gap-2">
-                      <FaCog className="text-gray-500" size={16} />
-                      Settings
-                    </Link>
-                    <button
-                      onClick={handleLogout}
-                      className="block px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors duration-150 w-full text-left flex items-center gap-2 focus:outline-none"
-                    >
-                      <FaSignOutAlt className="text-red-500" size={16} />
-                      Logout
-                    </button>
+                    {isAdmin ? (
+                      <>
+                        <Link href="/admin" className="block px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors duration-150 flex items-center gap-2">
+                          <FaHome className="text-gray-500" size={16} />
+                          Home
+                        </Link>
+                        <Link href="/admin/dashboard" className="block px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors duration-150 flex items-center gap-2">
+                          <FaTachometerAlt className="text-indigo-500" size={16} />
+                          Dashboard
+                        </Link>
+                        <div className="border-t border-gray-200 my-1"></div>
+                        <button
+                          onClick={handleLogout}
+                          className="block px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors duration-150 w-full text-left flex items-center gap-2 focus:outline-none"
+                        >
+                          <FaSignOutAlt className="text-red-500" size={16} />
+                          Logout
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <Link href="/" className="block px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors duration-150 flex items-center gap-2">
+                          <FaHome className="text-gray-500" size={16} />
+                          Home
+                        </Link>
+                        <Link href="/dashboard" className="block px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors duration-150 flex items-center gap-2">
+                          <FaTachometerAlt className="text-gray-500" size={16} />
+                          Dashboard
+                        </Link>
+                        <Link href="/profile" className="block px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors duration-150 flex items-center gap-2">
+                          <FaUser className="text-gray-500" size={16} />
+                          Profile
+                        </Link>
+                        <Link href="/settings" className="block px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors duration-150 flex items-center gap-2">
+                          <FaCog className="text-gray-500" size={16} />
+                          Settings
+                        </Link>
+                        <div className="border-t border-gray-200 my-1"></div>
+                        <button
+                          onClick={handleLogout}
+                          className="block px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors duration-150 w-full text-left flex items-center gap-2 focus:outline-none"
+                        >
+                          <FaSignOutAlt className="text-red-500" size={16} />
+                          Logout
+                        </button>
+                      </>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
           ) : (
-            // Login and Get Started Buttons
+            // Login and Get Started Buttons for non-logged-in users
             <div className="flex items-center space-x-6">
               <Link
                 href={'/login'}

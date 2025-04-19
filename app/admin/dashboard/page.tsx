@@ -1,8 +1,11 @@
-// src/app/admin/page.tsx
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { auth, db } from '@/app/firebase/firebaseConfig';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 // Import Shadcn UI components and utils
 import { Button } from "@/components/ui/button";
@@ -10,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge"; // Import Badge
 import { Separator } from "@/components/ui/separator"; // For dividing sections
 // Assuming you have icons from lucide-react installed
-import { Users, ShoppingCart, Package, CreditCard, TrendingUp, AlertCircle } from 'lucide-react';
+import { Users, ShoppingCart, Package, CreditCard, TrendingUp, AlertCircle, ShieldAlert } from 'lucide-react';
 
 // Placeholder data (replace with actual data fetching logic)
 const stats = [
@@ -51,13 +54,69 @@ const getActivityBadgeVariant = (type: string) => {
   }
 }
 
-
 const AdminLandingPage = () => {
+  const router = useRouter();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false); // State to check if the user is an admin
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [router]);
+
+  useEffect(() => {
+    const checkAdminRole = async () => {
+      if (currentUser) {
+        try {
+          const adminRef = doc(db, "admins", currentUser.uid);
+          const docSnap = await getDoc(adminRef);
+          setIsAdmin(docSnap.exists());
+        } catch (error) {
+          console.error("Error checking admin role:", error);
+          setIsAdmin(false); // Assume not admin on error
+        }
+      } else {
+        setIsAdmin(false);
+      }
+    };
+
+    if (!loading) {
+      checkAdminRole();
+    }
+  }, [currentUser, loading]);
+
+  if (loading) {
+    return <div className="flex justify-center items-center h-screen"><p className="text-lg text-gray-700">Checking authentication...</p></div>;
+  }
+
+  if (!currentUser) {
+    router.push('/admin/login');
+    return null;
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col justify-center items-center h-screen bg-muted/40">
+        <ShieldAlert className="w-16 h-16 text-orange-500 mb-4" />
+        <h2 className="text-xl font-semibold text-gray-800 mb-2">Unauthorized Access</h2>
+        <p className="text-gray-600 mb-4">You do not have permission to view this page.</p>
+        <Button asChild variant="outline">
+          <Link href="/">Go to Homepage</Link>
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen w-full flex-col bg-muted/40">
       {/* Sidebar placeholder (optional, depending on your layout) */}
       {/* <aside className="fixed inset-y-0 left-0 z-10 w-14 flex-col border-r bg-background sm:flex">
-        {/* Sidebar content goes here */}
+        {/* Sidebar content goes here */}
       {/* </aside> */}
 
       <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-14 w-full"> {/* Adjust pl-14 if sidebar is used */}
@@ -130,7 +189,6 @@ const AdminLandingPage = () => {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         {/* Icon indicator based on type */}
-                        {/* Removed specific colored icons to let Badge handle styling */}
                         {activity.type === 'user' && <Users className="h-4 w-4 text-muted-foreground" />}
                         {activity.type === 'order' && <ShoppingCart className="h-4 w-4 text-muted-foreground" />}
                         {activity.type === 'product' && <Package className="h-4 w-4 text-muted-foreground" />}

@@ -1,11 +1,17 @@
-import React from 'react'
+// app/dashboard/page.jsx (or pages/dashboard.jsx)
+"use client";
 
-const page = () => {
+import ProtectedRoute from '@/components/ProtectedRoute';
+
+const DashboardPage = () => {
   return (
-    <div>
-      dashboard
-    </div>
-  )
-}
+    <ProtectedRoute>
+      <div>
+        <h1>Dashboard</h1>
+        {/* Your dashboard content that only regular users should see */}
+      </div>
+    </ProtectedRoute>
+  );
+};
 
-export default page
+export default DashboardPage;
