@@ -7,7 +7,7 @@ const DashboardPage = () => {
   return (
     <ProtectedRoute>
       <div>
-        <h1>Dashboard</h1>
+        <h1>User Dashboard</h1>
         {/* Your dashboard content that only regular users should see */}
       </div>
     </ProtectedRoute>
