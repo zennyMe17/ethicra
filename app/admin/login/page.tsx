@@ -1,13 +1,11 @@
 // src/app/admin/login/page.tsx
-'use client'; // This is a Client Component
+'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/app/firebase/firebaseConfig"; // Import your auth instance
-
-// Import Shadcn UI components and utils
-import { cn } from "@/lib/utils"; // Assuming you have this for utility classes
+import { auth } from "@/app/firebase/firebaseConfig";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -18,38 +16,30 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import Link from 'next/link'; // For linking to the sign-up page
-import { Eye, EyeOff } from 'lucide-react'; // Icons for password visibility
+import Link from 'next/link';
+import { Eye, EyeOff } from 'lucide-react';
 
-// Import the function to ensure the admin doc exists - UNCOMMENT AND ADJUST PATH IF NEEDED
-// import { ensureAdminDocExists } from '@/lib/firestoreAdmin';
-
-// Type for error message
 type ErrorMessage = string | null;
 
-// This component uses the styling from your last snippet and the basic email/password logic
-export default function AdminLoginPage({ // Renamed to default export
+const AdminLoginPage: React.FC<React.ComponentPropsWithoutRef<"div">> = ({
     className,
     ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+}) => {
     const [showPassword, setShowPassword] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [error, setError] = useState<ErrorMessage>(null); // State to hold error messages
-    const [loading, setLoading] = useState(false); // Added loading state
-
-    // auth instance is imported, no need to call getAuth(app) inside component
+    const [error, setError] = useState<ErrorMessage>(null);
+    const [loading, setLoading] = useState(false);
     const router = useRouter();
 
-    // --- Email/Password Login Logic (from our working snippet) ---
     const handleLogin = async (event: React.FormEvent) => {
         event.preventDefault();
         setError(null);
-        setLoading(true); // Start loading
+        setLoading(true);
 
         if (!email || !password) {
             setError("Please enter both email and password.");
-            setLoading(false); // Stop loading
+            setLoading(false);
             return;
         }
 
@@ -63,14 +53,10 @@ export default function AdminLoginPage({ // Renamed to default export
             // await ensureAdminDocExists();
             // console.log('Admin doc ensured after login');
 
-
-            // Redirect on success
-            // IMPORTANT: Ensure this path '/admin' is correct for your admin dashboard
             router.push('/admin');
 
-        } catch (firebaseError) { // Use 'any' or specific FirebaseError type for easier error code access
+        } catch (firebaseError) {
             console.error("Firebase Login Error:", firebaseError);
-            // Display user-friendly error message based on error code (from our working snippet)
             switch (firebaseError) {
                 case 'auth/user-not-found':
                     setError('No user found with this email.');
@@ -81,37 +67,29 @@ export default function AdminLoginPage({ // Renamed to default export
                 case 'auth/invalid-email':
                     setError('The email address is invalid.');
                     break;
-                case 'auth/invalid-credential': // Newer versions might return this
+                case 'auth/invalid-credential':
                     setError('Invalid login credentials.');
                     break;
                 default:
-                    // Fallback to generic message or the error message from Firebase
                     setError(`Login failed: ${firebaseError}`);
             }
         } finally {
-            setLoading(false); // Stop loading regardless of success or failure
+            setLoading(false);
         }
     };
-    // --- End Login Logic ---
-
 
     return (
         <div className={cn("flex min-h-screen items-center justify-center p-4 sm:p-8 md:p-24", className)} {...props}>
-            <Card className="w-full max-w-md"> {/* Card with max width for centering */}
+            <Card className="w-full max-w-md">
                 <CardHeader className="text-center">
-                    <CardTitle className="text-2xl">Welcome back Admin</CardTitle> {/* Adjusted title size */}
+                    <CardTitle className="text-2xl">Welcome back Admin</CardTitle>
                     <CardDescription>
                         Login to your Admin account
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {/* --- Email/Password Login Form using Shadcn components --- */}
-                    <form onSubmit={handleLogin}> {/* Form wraps the core fields */}
-                        <div className="grid gap-4"> {/* Gap for elements within the form */}
-                            {/* REMOVED: Social Login Buttons */}
-                            {/* REMOVED: Separator "Or continue with" */}
-
-                            {/* Email Input */}
+                    <form onSubmit={handleLogin}>
+                        <div className="grid gap-4">
                             <div className="grid gap-2">
                                 <Label htmlFor="email">Email</Label>
                                 <Input
@@ -123,15 +101,12 @@ export default function AdminLoginPage({ // Renamed to default export
                                     required
                                 />
                             </div>
-
-                            {/* Password Input */}
                             <div className="grid gap-2">
                                 <div className="flex items-center">
                                     <Label htmlFor="password">Password</Label>
-                                    {/* Link to Forgot Password (Keep if applicable to admin) */}
                                     <Link
                                         href="/admin/forgot-password" // IMPORTANT: Adjust path if you have a forgot password page
-                                        className="ml-auto inline-block text-sm underline-offset-4 hover:underline" // Added inline-block
+                                        className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
                                     >
                                         Forgot your password?
                                     </Link>
@@ -144,9 +119,8 @@ export default function AdminLoginPage({ // Renamed to default export
                                         onChange={(e) => setPassword(e.target.value)}
                                         required
                                     />
-                                    {/* Password visibility toggle */}
                                     <button
-                                        type="button" // Important: Prevent form submission
+                                        type="button"
                                         className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400"
                                         onClick={() => setShowPassword(!showPassword)}
                                         aria-label="Toggle password visibility"
@@ -155,22 +129,13 @@ export default function AdminLoginPage({ // Renamed to default export
                                     </button>
                                 </div>
                             </div>
-
-                            {/* Display error message */}
                             {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-
-
-                            {/* Login Button */}
                             <Button type="submit" className="w-full" disabled={loading}>
                                 {loading ? 'Logging In...' : 'Sign In'}
                             </Button>
                         </div>
                     </form>
-                    {/* --- End Email/Password Login Form --- */}
-
-
-                    {/* Sign Up Link */}
-                    <div className="mt-4 text-center text-sm"> {/* Added margin-top */}
+                    <div className="mt-4 text-center text-sm">
                         Don&apos;t have an account?{" "}
                         {/* IMPORTANT: Link to your Admin Sign-up page */}
                         <Link href="/admin/sign-up" className="underline underline-offset-4 hover:text-primary">
@@ -183,10 +148,8 @@ export default function AdminLoginPage({ // Renamed to default export
                     </div>
                 </CardContent>
             </Card>
-
-            {/* Footer Text */}
-            {/* IMPORTANT: Adjust links if you have specific admin terms/privacy pages */}
-
         </div>
     );
-}
+};
+
+export default AdminLoginPage;
