@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/app/firebase/firebaseConfig";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -20,10 +19,7 @@ import { Eye, EyeOff } from 'lucide-react';
 
 type ErrorMessage = string | null;
 
-const AdminLoginPage: React.FC<React.ComponentPropsWithoutRef<"div">> = ({
-    className,
-    ...props
-}) => {
+const AdminLoginPage = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -46,9 +42,7 @@ const AdminLoginPage: React.FC<React.ComponentPropsWithoutRef<"div">> = ({
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
             console.log("Logged in with email/password:", user.uid);
-
             router.push('/admin');
-
         } catch (firebaseError) {
             console.error("Firebase Login Error:", firebaseError);
             switch (firebaseError) {
@@ -73,7 +67,7 @@ const AdminLoginPage: React.FC<React.ComponentPropsWithoutRef<"div">> = ({
     };
 
     return (
-        <div className={cn("flex min-h-screen items-center justify-center p-4 sm:p-8 md:p-24", className)} {...props}>
+        <div className="flex min-h-screen items-center justify-center p-4 sm:p-8 md:p-24">
             <Card className="w-full max-w-md">
                 <CardHeader className="text-center">
                     <CardTitle className="text-2xl">Welcome back Admin</CardTitle>
@@ -102,7 +96,7 @@ const AdminLoginPage: React.FC<React.ComponentPropsWithoutRef<"div">> = ({
                                         href="/admin/forgot-password"
                                         className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
                                     >
-                                        Forgot your password?
+                                        Forgot your password ?
                                     </Link>
                                 </div>
                                 <div className="relative">
@@ -145,4 +139,4 @@ const AdminLoginPage: React.FC<React.ComponentPropsWithoutRef<"div">> = ({
     );
 };
 
-export default AdminLoginPage;  // Ensure this line is at the bottom
+export default AdminLoginPage;
