@@ -154,20 +154,20 @@ export default function ProfilePage() {
 
   return (
     <div className="bg-[#FAFAFC] py-10">
-      <div className="max-w-3xl mx-auto rounded-lg shadow-xl overflow-hidden">
+      <div className="max-w-3xl mx-auto rounded-lg shadow-xl overflow-hidden mt-10 mb-10">
         <div className="bg-transparent py-6 px-6 sm:px-12 flex justify-between items-center">
-          <h2 className="text-3xl font-semibold text-indigo-700 tracking-tight">Your Profile</h2>
+          <h2 className="text-2xl sm:text-3xl font-semibold text-indigo-700 tracking-tight">Your Profile</h2>
           {!isEditing && (
             <Button
               onClick={handleEdit}
-              className="border bg-white border-[#4A3AFF] text-[#4A3AFF] py-2 px-5 rounded h-[40px] flex items-center justify-center hover:bg-[#F0EDFF] hover:cursor-pointer hover:text-[#6357FF] transition-colors duration-200"
+              className="border bg-white border-[#4A3AFF] text-[#4A3AFF] py-2 px-4 rounded h-[36px] sm:h-[40px] text-sm flex items-center justify-center hover:bg-[#F0EDFF] hover:cursor-pointer hover:text-[#6357FF] transition-colors duration-200"
             >
               Edit
             </Button>
           )}
         </div>
         <div className="p-6 sm:px-12 sm:py-8">
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             <div>
               <Label htmlFor="email" className="block text-sm font-medium text-gray-700">Email Address</Label>
               <Input
@@ -200,10 +200,10 @@ export default function ProfilePage() {
                   onValueChange={(value) => setUserData({ ...userData, countryCode: value })}
                   disabled={!isEditing}
                 >
-                  <SelectTrigger className={`flex items-center justify-between rounded-l-md border border-r-0 border-gray-300 bg-gray-50 px-3 py-2 text-gray-500 sm:text-sm ${!isEditing ? 'cursor-not-allowed' : ''}`}>
+                  <SelectTrigger className={`flex items-center justify-between rounded-l-md border border-r-0 border-gray-300 bg-gray-50 px-2 sm:px-3 py-2 text-gray-500 sm:text-sm ${!isEditing ? 'cursor-not-allowed' : ''}`}>
                     <SelectValue placeholder="Code" />
                   </SelectTrigger>
-                  <SelectContent className="max-h-40 overflow-y-auto">
+                  <SelectContent className="max-h-40 overflow-y-auto text-sm">
                     {countryCodes.map((country) => (
                       <SelectItem key={country.code} value={country.dialCode}>
                         {country.flag} {country.dialCode}
@@ -224,7 +224,7 @@ export default function ProfilePage() {
 
             <div>
               <Label className="block text-sm font-medium text-gray-700">Location</Label>
-              <div className="mt-1 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="mt-1 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
                   <Label htmlFor="country" className="block text-xs font-medium text-gray-700">Country</Label>
                   <Input
@@ -276,11 +276,11 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="mt-8 flex justify-end gap-2">
+            <div className="mt-6 flex justify-end gap-2">
               {isEditing && (
                 <Button
                   onClick={() => setIsEditing(false)}
-                  className="border border-gray-300 bg-white text-gray-700 py-2 px-5 rounded h-[40px] flex items-center justify-center hover:bg-gray-100 hover:cursor-pointer transition-colors duration-200"
+                  className="border border-gray-300 bg-white text-gray-700 py-2 px-4 rounded h-[36px] sm:h-[40px] text-sm flex items-center justify-center hover:bg-gray-100 hover:cursor-pointer transition-colors duration-200"
                 >
                   Cancel
                 </Button>
@@ -288,7 +288,7 @@ export default function ProfilePage() {
               {isEditing && (
                 <Button
                   onClick={handleUpdate}
-                  className="border bg-white border-[#4A3AFF] text-[#4A3AFF] py-2 px-5 rounded h-[40px] flex items-center justify-center hover:bg-[#F0EDFF] hover:cursor-pointer hover:text-[#6357FF] transition-colors duration-200"
+                  className="border bg-white border-[#4A3AFF] text-[#4A3AFF] py-2 px-4 rounded h-[36px] sm:h-[40px] text-sm flex items-center justify-center hover:bg-[#F0EDFF] hover:cursor-pointer hover:text-[#6357FF] transition-colors duration-200"
                 >
                   Save Changes
                 </Button>

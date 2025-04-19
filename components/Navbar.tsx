@@ -85,7 +85,7 @@ const Navbar = () => {
         </Link>
         <div className="flex items-center space-x-6">
           {!user && (
-            <>
+            <div className="hidden sm:flex items-center space-x-6">
               <Link
                 href={'/'}
                 className={`text-[#5D5A88] relative hover:text-[#4A3AFF] transition-colors duration-200 ${activeTab === '/' ? 'font-semibold' : ''
@@ -116,7 +116,7 @@ const Navbar = () => {
                   <motion.div layoutId="active-underline" className="absolute bottom-[-2px] left-0 w-full h-[2px] bg-[#4A3AFF] rounded-full" />
                 )}
               </Link>
-            </>
+            </div>
           )}
 
           {user ? (
@@ -172,7 +172,7 @@ const Navbar = () => {
             </div>
           ) : (
             // Login and Get Started Buttons
-            <>
+            <div className="flex items-center space-x-6">
               <Link
                 href={'/login'}
                 className="border border-gray-300 rounded-md px-4 py-2 text-[#5D5A88] hover:bg-gray-100 hover:text-[#4A3AFF] transition-colors duration-200"
@@ -185,7 +185,7 @@ const Navbar = () => {
                 onClick={() => handleTabClick('/sign-up')}>
                 Get Started
               </Link>
-            </>
+            </div>
           )}
         </div>
       </div>

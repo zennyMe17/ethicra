@@ -121,7 +121,7 @@ const SettingsPage = () => {
 
   return (
     <div className="bg-gray-100 py-12">
-      <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-md overflow-hidden md:flex">
+      <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-md overflow-hidden md:flex mt-20 mb-20">
         {/* Left Sidebar */}
         <aside className="w-full md:w-1/3 p-8 border-b md:border-b-0 md:border-r">
           <h3 className="text-lg font-semibold text-indigo-600 mb-4">Account Settings</h3>
