@@ -1,4 +1,3 @@
-// src/app/admin/login/page.tsx
 'use client';
 
 import { useState } from 'react';
@@ -47,11 +46,6 @@ const AdminLoginPage: React.FC<React.ComponentPropsWithoutRef<"div">> = ({
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
             console.log("Logged in with email/password:", user.uid);
-
-            // Optional: Call the function to ensure the admin doc exists
-            // IMPORTANT: Uncomment and adjust the import path for ensureAdminDocExists if using
-            // await ensureAdminDocExists();
-            // console.log('Admin doc ensured after login');
 
             router.push('/admin');
 
@@ -105,7 +99,7 @@ const AdminLoginPage: React.FC<React.ComponentPropsWithoutRef<"div">> = ({
                                 <div className="flex items-center">
                                     <Label htmlFor="password">Password</Label>
                                     <Link
-                                        href="/admin/forgot-password" // IMPORTANT: Adjust path if you have a forgot password page
+                                        href="/admin/forgot-password"
                                         className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
                                     >
                                         Forgot your password?
@@ -137,7 +131,6 @@ const AdminLoginPage: React.FC<React.ComponentPropsWithoutRef<"div">> = ({
                     </form>
                     <div className="mt-4 text-center text-sm">
                         Don&apos;t have an account?{" "}
-                        {/* IMPORTANT: Link to your Admin Sign-up page */}
                         <Link href="/admin/sign-up" className="underline underline-offset-4 hover:text-primary">
                             Sign up
                         </Link>
@@ -152,4 +145,4 @@ const AdminLoginPage: React.FC<React.ComponentPropsWithoutRef<"div">> = ({
     );
 };
 
-export default AdminLoginPage;
+export default AdminLoginPage;  // Ensure this line is at the bottom
