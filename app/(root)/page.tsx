@@ -48,10 +48,11 @@ const Page = () => {
       </div>
 
       {/* Features Section */}
-      <div className="bg-[#4A3AFF] py-16 sm:py-24 px-6 sm:px-16 h-auto sm:h-[600px] overflow-visible w-screen">
-        <div className="flex flex-col md:flex-row justify-between gap-8 md:gap-2 w-11/12 md:w-10/12 mx-auto items-center">
-          {/* Card 1: Online Assessment (Bottom on small) */}
-          <div className="text-center text-[#1D4645] p-6 bg-[#DBEDF5] w-full max-w-sm md:w-[300px] h-[350px] flex flex-col justify-center items-center mt-0 md:mt-52 shadow-md transition-all duration-300 transform-gpu hover:scale-105 hover:shadow-lg order-2 md:order-1">
+      <div className="bg-[#4A3AFF] py-16 sm:py-24 px-6 sm:px-16 w-screen">
+        <div className="flex flex-col md:flex-row justify-center items-center gap-8 md:gap-16 w-11/12 md:w-10/12 mx-auto">
+          {/* Card 1: Online Assessment (Bottom on small, Left/Lowest on md+) */}
+          {/* Increased md:w and h values */}
+          <div className="text-center text-[#1D4645] p-6 bg-[#DBEDF5] w-full max-w-sm md:w-[400px] h-[400px] flex flex-col justify-center items-center shadow-md transition-all duration-300 transform-gpu hover:scale-105 hover:shadow-lg order-2 md:order-1 md:mt-32"> {/* Changed h to 400px */}
             <div className="w-[120px] h-[120px] sm:w-[160px] sm:h-[160px] rounded-full bg-white mb-4 flex items-center justify-center">
               <Image src="/images/Mask.png" alt="Assessment Icon" width={160} height={160} className="w-full h-full object-contain" />
             </div>
@@ -60,7 +61,8 @@ const Page = () => {
           </div>
 
           {/* Card 2: Online Interview (Middle) */}
-          <div className="text-center text-white p-6 bg-[#102F2E] w-full max-w-sm md:w-[300px] h-[350px] flex flex-col justify-center items-center mt-0 md:translate-y-[-40px] md:mt-36 shadow-md transition-all duration-300 transform-gpu hover:scale-105 hover:shadow-lg order-1 md:order-2">
+          {/* Increased md:w and h values */}
+          <div className="text-center text-white p-6 bg-[#102F2E] w-full max-w-sm md:w-[400px] h-[400px] flex flex-col justify-center items-center shadow-md transition-all duration-300 transform-gpu hover:scale-105 hover:shadow-lg order-1 md:order-2 md:mt-16"> {/* Changed h to 400px */}
             <div className="w-[120px] h-[120px] sm:w-[160px] sm:h-[160px] rounded-full bg-white mb-4 flex items-center justify-center ">
               <Image src="/images/Mask (2).png" alt="Interview Icon" width={160} height={160} className="w-full h-full object-contain" />
             </div>
@@ -68,8 +70,9 @@ const Page = () => {
             <p className="text-lg">Conduct interviews remotely.</p>
           </div>
 
-          {/* Card 3: Report (Top on small) */}
-          <div className="text-center text-[#1D4645] p-6 bg-[#FEF1E2] w-full max-w-sm md:w-[300px] h-[350px] flex flex-col justify-center items-center mt-0 md:translate-y-[-48px] md:mt-1 shadow-md transition-all duration-300 transform-gpu hover:scale-105 hover:shadow-lg order-3 md:order-3 mb-48">
+          {/* Card 3: Report (Top on small, Right/Highest on md+) */}
+          {/* Increased md:w and h values */}
+          <div className="text-center text-[#1D4645] p-6 bg-[#FEF1E2] w-full max-w-sm md:w-[400px] h-[400px] flex flex-col justify-center items-center shadow-md transition-all duration-300 transform-gpu hover:scale-105 hover:shadow-lg order-3 md:order-3 md:mt-0 mb-48 md:mb-0"> {/* Changed h to 400px */}
             <div className="w-[120px] h-[120px] sm:w-[160px] sm:h-[160px] rounded-full bg-white mb-4 flex items-center justify-center">
               <Image src="/images/Mask (1).png" alt="Report Icon" width={160} height={160} className="w-full h-full object-contain" />
             </div>
@@ -80,6 +83,7 @@ const Page = () => {
       </div>
 
       {/* Explore Jobs Section */}
+      {/* Note: The job cards below also have fixed widths and absolute positioning */}
       <div className="w-11/12 md:w-10/12 mx-auto my-16 sm:my-28 px-4 md:px-11 relative pb-12 sm:pb-20 min-h-[auto] sm:min-h-[800px] hidden sm:block">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-6 sm:mb-10 gap-4">
           <p className="text-2xl sm:text-3xl font-semibold text-center text-[#1D4645] sm:text-left">Explore Jobs</p>
@@ -92,6 +96,7 @@ const Page = () => {
         </div>
         {/* Job Cards */}
         <div className="mt-6 sm:mt-0 relative">
+          {/* These cards use absolute positioning and fixed widths/heights, consider adjusting them if needed */}
           <div className="w-[410px] h-[305.89px] bg-[#FFF2E6] p-6 mb-4 shadow-sm transition-all duration-300 hover:shadow-lg hover:scale-105 absolute left-[44px] top-[100px]">
             <div className="w-[35px] h-[37px] sm:w-[45px] sm:h-[47px] rounded-full mb-4 overflow-hidden">
               <Image src="/images/remote.png" alt="Remote Jobs" width={45} height={47} className="w-full h-full object-cover" />
@@ -129,6 +134,7 @@ const Page = () => {
           </div>
         </div>
       </div>
+
 
       {/* Restructured Last Section - Circles Replaced with Image */}
       <div className="min-h-[600px] flex flex-col md:flex-row mx-auto w-11/12 md:w-10/12 justify-between items-start gap-10 md:gap-20 py-24">
