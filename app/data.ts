@@ -15,9 +15,9 @@ export interface TeamMember {
       name: "Hemanth",
       image: "/images/Hemanth.jpeg",
       roles: ["Lead Web Developer", "Machine Learning Lead"], 
-      linkedin: "",
-      instagram: "",
-      email: "",
+      linkedin: "https://www.linkedin.com/in/hemanth-s-b239b02b3",
+      instagram: "https://www.instagram.com/hemanth_go_w_da?utm_source=qr&igsh=MWhrMHBldnVxcW94YQ==",
+      email: "gowda.hemanth.1718@gmail.com",
     },
     {
       id: 2,
