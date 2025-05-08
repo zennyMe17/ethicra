@@ -3,7 +3,7 @@ import React from 'react'
 const page = () => {
     return (
         <div>
-            Contact Page
+            Contact Us Anytime 
         </div>
     )
 }
