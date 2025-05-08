@@ -24,9 +24,9 @@ export interface TeamMember {
       name: "Maralingeshwar",
       image: "/images/Maralingeshwar.jpeg",
       roles: ["Web Designer", "ML Innovation Specialist"], 
-      linkedin: "",
-      instagram: "",
-      email: "",
+      linkedin: "https://www.linkedin.com/in/marlingeshwar26",
+      instagram: "https://www.instagram.com/marlingeshwar?igsh=MXI0aTg1NWk2bTd0Zw==",
+      email: "marlingeshwar2003@gmail.com",
     },
     {
       id: 3,
