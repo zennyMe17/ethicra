@@ -1,4 +1,4 @@
-// app/page.tsx (or the file where your VapiInterviewBot component resides)
+// app/page.tsx (or your VapiInterviewBot component file)
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -16,10 +16,13 @@ export default function VapiInterviewBot() {
     const [isMuted, setIsMuted] = useState<boolean>(false);
     const [assistantId, setAssistantId] = useState<string>("");
 
-    // NEW STATE FOR TRANSCRIPT FETCHING
     const [transcriptCallId, setTranscriptCallId] = useState<string>('');
     const [transcriptOutput, setTranscriptOutput] = useState<string | null>(null);
     const [isFetchingTranscript, setIsFetchingTranscript] = useState<boolean>(false);
+
+    // NEW STATE FOR EVALUATION
+    const [evaluationResult, setEvaluationResult] = useState<string | null>(null);
+    const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
 
 
     const vapiRef = useRef<Vapi | null>(null);
@@ -30,7 +33,6 @@ export default function VapiInterviewBot() {
     useEffect(() => {
         isCallActiveRef.current = isCallActive;
         console.log(`[DEBUG] isCallActive state changed to: ${isCallActive}`);
-        // Optionally set the transcriptCallId input if a call just ended
         if (!isCallActive && currentCallIdRef.current) {
             setTranscriptCallId(currentCallIdRef.current);
         }
@@ -42,6 +44,7 @@ export default function VapiInterviewBot() {
         setIsLoading(false);
         setErrorMessage(null);
         setTranscriptOutput(null); // Clear previous transcript output
+        setEvaluationResult(null); // Clear previous evaluation output
 
         const callIdAtEnd = currentCallIdRef.current;
         console.log(`[DEBUG] currentCallIdRef.current at handleCallEnd: ${callIdAtEnd}`);
@@ -49,7 +52,6 @@ export default function VapiInterviewBot() {
         if (callIdAtEnd) {
             setStatus(`Interview Ended. Call ID: ${callIdAtEnd}`);
             console.log(`SUCCESS: Call ended. The Call ID was: ${callIdAtEnd}`);
-            // Automatically populate the transcript input field with the ended call's ID
             setTranscriptCallId(callIdAtEnd); 
         } else {
             console.error("ERROR: Call ended, but currentCallIdRef.current was NULL.");
@@ -154,7 +156,8 @@ export default function VapiInterviewBot() {
         setIsLoading(true);
         setErrorMessage(null);
         setStatus("Initiating Interview...");
-        setTranscriptOutput(null); // Clear transcript output for a new call
+        setTranscriptOutput(null); 
+        setEvaluationResult(null); // Clear previous evaluation output
         
         currentCallIdRef.current = null; 
         console.log("[DEBUG] currentCallIdRef.current reset before new call attempt.");
@@ -237,16 +240,17 @@ export default function VapiInterviewBot() {
         console.log("Sent background prompt to interviewer.");
     };
 
-    // NEW FUNCTION TO FETCH TRANSCRIPT
     const fetchTranscript = async () => {
         if (!transcriptCallId) {
             setTranscriptOutput("Please enter a Call ID to fetch the transcript.");
+            setEvaluationResult(null); // Clear evaluation if ID is empty
             return;
         }
 
         setIsFetchingTranscript(true);
-        setTranscriptOutput(null); // Clear previous output
-        setErrorMessage(null); // Clear any old errors
+        setTranscriptOutput(null); 
+        setEvaluationResult(null); // Clear evaluation on new fetch
+        setErrorMessage(null);
 
         try {
             console.log(`[Fetch Transcript] Requesting transcript for Call ID: ${transcriptCallId}`);
@@ -254,7 +258,8 @@ export default function VapiInterviewBot() {
             const data = await response.json();
 
             if (response.ok) {
-                setTranscriptOutput(data.transcript || "Transcript not found for this call ID.");
+                const fetchedTranscript = data.transcript || "Transcript not found for this call ID.";
+                setTranscriptOutput(fetchedTranscript);
                 console.log("[Fetch Transcript] Transcript fetched successfully.");
             } else {
                 setTranscriptOutput(`Error: ${data.error || 'Failed to fetch transcript.'}`);
@@ -267,6 +272,46 @@ export default function VapiInterviewBot() {
             console.error("[Fetch Transcript] Client-side fetch error:", error);
         } finally {
             setIsFetchingTranscript(false);
+        }
+    };
+
+    // NEW FUNCTION TO EVALUATE TRANSCRIPT
+    const evaluateTranscript = async () => {
+        if (!transcriptOutput || transcriptOutput === "Transcript not found for this call ID." || transcriptOutput.startsWith("Error:")) {
+            setEvaluationResult("Please fetch a valid transcript first.");
+            return;
+        }
+        
+        setIsEvaluating(true);
+        setEvaluationResult(null); // Clear previous evaluation
+        setErrorMessage(null); // Clear any old errors
+
+        try {
+            console.log("[Evaluate Transcript] Sending transcript to OpenAI for evaluation.");
+            const response = await fetch('/api/evaluate-transcript', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ transcript: transcriptOutput }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                setEvaluationResult(data.evaluation);
+                console.log("[Evaluate Transcript] Evaluation received successfully.");
+            } else {
+                setEvaluationResult(`Error: ${data.error || 'Failed to get evaluation.'}`);
+                setErrorMessage(data.error || 'Failed to get evaluation.');
+                console.error("[Evaluate Transcript] Error response from API:", data.error);
+            }
+        } catch (error: any) {
+            setEvaluationResult(`Error evaluating transcript: ${error.message || 'Network error'}`);
+            setErrorMessage(`Error evaluating transcript: ${error.message || 'Network error'}`);
+            console.error("[Evaluate Transcript] Client-side evaluation fetch error:", error);
+        } finally {
+            setIsEvaluating(false);
         }
     };
 
@@ -381,6 +426,29 @@ export default function VapiInterviewBot() {
                         </div>
                     )}
                 </div>
+
+                {/* Transcript Evaluation Section */}
+                <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
+                    <h2 className="text-xl font-semibold mb-3 text-gray-800">Evaluate Transcript</h2>
+                    <button
+                        onClick={evaluateTranscript}
+                        disabled={isEvaluating || !transcriptOutput || transcriptOutput.startsWith("Error:") || transcriptOutput === "Transcript not found for this call ID."}
+                        className={`w-full font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-200
+                            ${isEvaluating || !transcriptOutput || transcriptOutput.startsWith("Error:") || transcriptOutput === "Transcript not found for this call ID."
+                                ? 'bg-purple-300 cursor-not-allowed'
+                                : 'bg-purple-600 hover:bg-purple-700 text-white shadow-md hover:shadow-lg'
+                            }`}
+                    >
+                        {isEvaluating ? "Evaluating..." : "Evaluate Interview (with OpenAI)"}
+                    </button>
+                    {evaluationResult && (
+                        <div className="mt-4 p-3 bg-white border border-gray-300 rounded-lg text-gray-700 text-sm whitespace-pre-wrap">
+                            <h3 className="font-semibold mb-2">Evaluation:</h3>
+                            {evaluationResult}
+                        </div>
+                    )}
+                </div>
+
 
                 {/* Status Display */}
                 <div className="mb-6 text-center">
