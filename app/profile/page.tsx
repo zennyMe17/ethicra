@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, ChangeEvent, FormEvent, useRef } from "react"; // Added useRef
+import { useEffect, useState, ChangeEvent, FormEvent, useRef } from "react";
 import { auth, db } from "@/app/firebase/firebaseConfig";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { User, updateEmail, onAuthStateChanged } from "firebase/auth";
@@ -21,7 +21,6 @@ const countryCodes = [
   // Add more countries here
 ];
 
-
 interface UserData {
   email: string;
   name: string;
@@ -32,8 +31,8 @@ interface UserData {
     state: string;
     city: string;
   };
-  // Add field for resume URL if saving to Firestore
-  // resumeUrl?: string;
+  // Un-commented and added field for resume URL
+  resumeUrl?: string; // Now correctly typed
 }
 
 // --- IMPORTANT SECURITY WARNING ---
@@ -66,7 +65,7 @@ export default function ProfilePage() {
       state: "",
       city: "",
     },
-    // resumeUrl: "", // Initialize if adding a field for the URL
+    resumeUrl: "", // Initialize if adding a field for the URL
   });
   const [loading, setLoading] = useState<boolean>(true);
   const [isEditing, setIsEditing] = useState<boolean>(false);
@@ -78,7 +77,7 @@ export default function ProfilePage() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
+  const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null); // This holds the URL of the *just uploaded* file
   const fileInputRef = useRef<HTMLInputElement>(null); // Ref for the hidden file input
   // --- End State for File Upload ---
 
@@ -105,7 +104,7 @@ export default function ProfilePage() {
     });
 
     return () => unsubscribe();
-  }, [router]); // Added router dependency
+  }, [router]);
 
   // Fetch User Data based on auth state and role
   useEffect(() => {
@@ -132,7 +131,7 @@ export default function ProfilePage() {
               state: data.location?.state || "",
               city: data.location?.city || "",
             },
-            // resumeUrl: data.resumeUrl || "", // Load the URL if it exists
+            resumeUrl: data.resumeUrl || "", // Load the URL if it exists
           });
         } else {
           console.log("No such user document!");
@@ -143,11 +142,11 @@ export default function ProfilePage() {
       } catch (error) {
         console.error("Error fetching user data:", error);
         alert("Failed to load profile data. Please try again.");
-         if (!currentUser) { // Check again in case state changed during async operation
-             router.push("/login"); // Redirect to login if fetching fails and user is somehow null
-           } else {
-             router.push("/unauthorized"); // Otherwise, unauthorized or error page
-           }
+          if (!currentUser) { // Check again in case state changed during async operation
+            router.push("/login"); // Redirect to login if fetching fails and user is somehow null
+          } else {
+            router.push("/unauthorized"); // Otherwise, unauthorized or error page
+          }
       }
     };
 
@@ -155,7 +154,7 @@ export default function ProfilePage() {
     if (!loading && currentUser && isUser) {
       fetchData();
     }
-  }, [currentUser, router, loading, isUser]); // Added isUser dependency
+  }, [currentUser, router, loading, isUser]);
 
   const handleUpdate = async () => {
     if (!currentUser) return;
@@ -172,52 +171,63 @@ export default function ProfilePage() {
           state: userData.location.state,
           city: userData.location.city,
         },
-        // If you stored the file URL in state and want to save it:
-        // resumeUrl: userData.resumeUrl, // Save the resume URL if you add it
+        // If a new file was uploaded, its URL is already saved in handleFileUpload.
+        // We don't need to explicitly save it here unless you want to update it
+        // when other profile data is saved, which is redundant if handleFileUpload
+        // updates it immediately.
+        // We ensure `resumeUrl` is passed through if it was loaded or updated
+        resumeUrl: uploadedFileUrl || userData.resumeUrl, // Prioritize newly uploaded URL
       };
 
        // Only update email in Firestore if it's different and save attempt is made
        if (userData.email !== (currentUser.email || "")) {
-            updatePayload.email = userData.email;
+           updatePayload.email = userData.email;
        }
-
 
       await updateDoc(userRef, updatePayload); // Use the prepared payload
 
       // Update email in Firebase Auth if it was changed
       if (currentUser.email !== userData.email) {
-           // Check if email is not empty before updating Firebase Auth email
-           if (userData.email.trim() !== "") {
-               await updateEmail(currentUser, userData.email);
-           } else {
-               // Handle case where user tried to set email to empty string in UI (Auth requires email)
-               alert("Email cannot be empty. Please provide a valid email address.");
-               // Optionally, revert the email state back to currentUser.email
-               setUserData(prev => ({ ...prev, email: currentUser.email || "" }));
-               return; // Stop the update process here
-           }
+            // Check if email is not empty before updating Firebase Auth email
+            if (userData.email.trim() !== "") {
+                await updateEmail(currentUser, userData.email);
+            } else {
+                // Handle case where user tried to set email to empty string in UI (Auth requires email)
+                alert("Email cannot be empty. Please provide a valid email address.");
+                // Optionally, revert the email state back to currentUser.email
+                setUserData(prev => ({ ...prev, email: currentUser.email || "" }));
+                return; // Stop the update process here
+            }
        }
-
 
       alert("✅ Profile updated successfully!");
       setIsEditing(false); // Disable editing after successful update
-    } catch (error) { // Catch error as 'any' or more specific type
+      setUploadedFileUrl(null); // Clear temporary uploaded file URL after saving
+      setFile(null); // Clear selected file
+    } catch (error: any) { // Catch error as 'any' or more specific type
       console.error("Error updating profile:", error);
       // Provide more specific feedback for Auth errors vs Firestore errors if possible
-      if (error === 'auth/requires-recent-login') {
+      if (error.code === 'auth/requires-recent-login') {
             alert("Your last login was too long ago. Please re-authenticate by logging out and logging back in to change your email.");
             // Optionally redirect to re-authentication flow
-         } else if (error === 'auth/invalid-email') {
-             alert("The email address is invalid.");
-         }
+           } else if (error.code === 'auth/invalid-email') {
+                alert("The email address is invalid.");
+           }
       else {
-            alert(`❌ Error updating profile: ${error}. Please try again.`);
-         }
+            alert(`❌ Error updating profile: ${error.message || error}. Please try again.`);
+           }
     }
   };
 
   const handleEdit = () => {
     setIsEditing(true);
+    // Reset file upload state when entering edit mode to ensure a clean slate for new uploads
+    setFile(null);
+    setUploadError(null);
+    setUploadedFileUrl(null);
+    if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+    }
   };
 
   // --- File Upload Handlers ---
@@ -225,7 +235,7 @@ export default function ProfilePage() {
     if (event.target.files && event.target.files[0]) {
       setFile(event.target.files[0]);
       setUploadError(null); // Clear previous errors
-      setUploadedFileUrl(null); // Clear previous link
+      setUploadedFileUrl(null); // Clear previous link if a new file is selected
     } else {
       setFile(null);
     }
@@ -241,7 +251,7 @@ export default function ProfilePage() {
 
     setUploading(true);
     setUploadError(null);
-    setUploadedFileUrl(null);
+    setUploadedFileUrl(null); // Clear previous URL when starting a new upload
 
     const reader = new FileReader();
 
@@ -278,22 +288,23 @@ export default function ProfilePage() {
         // Construct the public URL for the uploaded object
         const publicUrl = `https://${bucketName}.s3.${process.env.NEXT_PUBLIC_AWS_REGION}.amazonaws.com/${encodeURIComponent(fileKey)}`;
 
-        setUploadedFileUrl(publicUrl);
+        setUploadedFileUrl(publicUrl); // Set the URL of the *just uploaded* file
         console.log('File uploaded successfully:', publicUrl);
 
-        // Optional: Save the uploaded file URL to the user's profile in Firestore
-        // if (currentUser) {
-        //   const userRef = doc(db, "users", currentUser.uid);
-        //   await updateDoc(userRef, {
-        //     resumeUrl: publicUrl, // Assuming you have a field for the resume URL
-        //   });
-        //   console.log("Resume URL saved to profile.");
-        // }
+        // Save the uploaded file URL to the user's profile in Firestore immediately
+        if (currentUser) {
+          const userRef = doc(db, "users", currentUser.uid);
+          await updateDoc(userRef, {
+            resumeUrl: publicUrl, // Assuming you have a field for the resume URL
+          });
+          console.log("Resume URL saved to profile.");
+          // Update local state so the new URL is reflected without re-fetching
+          setUserData(prev => ({ ...prev, resumeUrl: publicUrl }));
+        }
 
-
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error uploading file:', err);
-        setUploadError(`Upload failed: ${err}`);
+        setUploadError(`Upload failed: ${err.message || err}`);
       } finally {
         setUploading(false);
         // Reset the file input element so the same file can be selected again if needed
@@ -308,7 +319,7 @@ export default function ProfilePage() {
       console.error('FileReader error:', err);
       setUploadError('Failed to read file.');
       setUploading(false);
-       if (fileInputRef.current) {
+        if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
     };
@@ -316,12 +327,28 @@ export default function ProfilePage() {
     reader.readAsArrayBuffer(file); // Start reading
   };
 
-    const handleRemoveFile = () => {
+    const handleRemoveFile = async () => {
+        // This is for removing the *currently selected* file in the input, not the one from the database
         setFile(null);
         setUploadError(null);
-        setUploadedFileUrl(null);
-         if (fileInputRef.current) {
+        setUploadedFileUrl(null); // Clear temporary uploaded URL
+        if (fileInputRef.current) {
             fileInputRef.current.value = '';
+        }
+
+        // Option to remove the resume URL from Firestore if the user wants to clear it entirely
+        if (currentUser && userData.resumeUrl) {
+            const userRef = doc(db, "users", currentUser.uid);
+            try {
+                await updateDoc(userRef, {
+                    resumeUrl: "", // Set resumeUrl to an empty string to remove it
+                });
+                setUserData(prev => ({ ...prev, resumeUrl: "" })); // Update local state
+                alert("Resume removed from profile successfully.");
+            } catch (error) {
+                console.error("Error removing resume URL from Firestore:", error);
+                alert("Failed to remove resume from profile. Please try again.");
+            }
         }
     };
   // --- End File Upload Handlers ---
@@ -361,7 +388,7 @@ export default function ProfilePage() {
 
         {/* Profile Details Form and File Upload (Combined) */}
         <div className="p-6 sm:px-12 sm:py-8">
-          <div className="space-y-6"> {/* Increased space-y for combined sections */}
+          <div className="space-y-6">
             {/* Email Field */}
             <div>
               <Label htmlFor="email" className="block text-sm font-medium text-gray-700">Email Address</Label>
@@ -399,19 +426,19 @@ export default function ProfilePage() {
                   disabled={!isEditing}
                 >
                    {/* Adjusted Trigger styling slightly to align */}
-                  <SelectTrigger className={`flex items-center justify-between rounded-l-md border border-r-0 border-gray-300 bg-gray-50 px-2 sm:px-3 py-2 text-gray-500 text-sm h-[38px] ${!isEditing ? 'cursor-not-allowed' : ''}`}> {/* Added h-[38px] for better alignment with input */}
+                  <SelectTrigger className={`flex items-center justify-between rounded-l-md border border-r-0 border-gray-300 bg-gray-50 px-2 sm:px-3 py-2 text-gray-500 text-sm h-[38px] ${!isEditing ? 'cursor-not-allowed' : ''}`}>
                     <SelectValue placeholder="Code" />
                   </SelectTrigger>
                    {/* Adjusted Content styling */}
                   <SelectContent className="max-h-40 overflow-y-auto text-sm">
                     {countryCodes.map((country) => (
                       <SelectItem key={country.code} value={country.dialCode}>
-                         {country.flag} {country.dialCode} - {country.name} {/* Added country name */}
+                         {country.flag} {country.dialCode} - {country.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                 {/* Phone Input */}
+                   {/* Phone Input */}
                 <Input
                   id="phone"
                   type="tel"
@@ -481,113 +508,163 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* --- Start File Upload Section (Integrated & Styled) --- */}
+            {/* --- Resume Section (Display or Upload) --- */}
             <div className="pt-6 border-t border-gray-200">
-                <h3 className="text-lg font-semibold mb-4 text-gray-800">Upload Resume</h3>
-                <form onSubmit={handleFileUpload} className="space-y-4">
-                  <div>
-                    <Label className="block text-sm font-medium text-gray-700">
-                      Resume File:
-                    </Label>
-                    <div className="mt-1 flex items-center gap-3"> {/* Added gap */}
-                         {/* Hidden file input */}
-                        <Input
-                            id="resume-file-upload" // Use a unique ID for the label
-                            type="file"
-                            onChange={handleFileChange}
-                            ref={fileInputRef} // Assign the ref
-                            className="sr-only" // Tailwind class to visually hide the input
-                        />
-                         {/* Custom styled Label acting as the button */}
-                        <Label
-                            htmlFor="resume-file-upload" // Link to the hidden input by ID
-                            className={`flex items-center justify-center py-2 px-4 border rounded-md shadow-sm text-sm font-medium transition-colors duration-200 cursor-pointer
-                                ${uploading ? 'bg-gray-200 text-gray-600 cursor-not-allowed' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100'}
-                            `}
-                            tabIndex={uploading ? -1 : 0} // Make it non-focusable while uploading
-                            aria-disabled={uploading} // Indicate disabled state for accessibility
-                        >
-                            {file ? 'Change File' : 'Choose File'} {/* Label changes based on selection */}
-                        </Label>
+                <h3 className="text-lg font-semibold mb-4 text-gray-800">Resume</h3>
 
-                        {/* Display selected file name */}
-                        {file && (
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm text-gray-600 truncate max-w-[150px] sm:max-w-xs">{file.name}</span> {/* truncate long names */}
-                                {!uploading && ( // Show remove button only when not uploading
+                {!isEditing ? (
+                    // Display existing resume when not editing
+                    <div>
+                        <Label className="block text-sm font-medium text-gray-700 mb-2">Current Resume:</Label>
+                        {userData.resumeUrl ? (
+                            <a
+                                href={userData.resumeUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline break-all block text-sm"
+                            >
+                                View Resume
+                            </a>
+                        ) : (
+                            <p className="text-sm text-gray-500">No resume uploaded.</p>
+                        )}
+                    </div>
+                ) : (
+                    // Show upload options when editing
+                    <form onSubmit={handleFileUpload} className="space-y-4">
+                        {/* Display existing resume URL for context during edit */}
+                        {(userData.resumeUrl || uploadedFileUrl) && (
+                            <div className="mb-4">
+                                <Label className="block text-sm font-medium text-gray-700 mb-1">Current Resume (in database):</Label>
+                                <a
+                                    href={uploadedFileUrl || userData.resumeUrl || "#"} // Prioritize newly uploaded
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:underline break-all block text-sm"
+                                >
+                                    {uploadedFileUrl ? "View Newly Uploaded Resume" : "View Existing Resume"}
+                                </a>
+                                {userData.resumeUrl && ( // Show remove option only if there's an existing resume
                                     <Button
-                                        type="button" // Important: type="button" to prevent form submission
+                                        type="button"
                                         onClick={handleRemoveFile}
                                         size="sm"
-                                        variant="ghost" // Example styling, adjust as needed
-                                        className="text-red-500 hover:text-red-700 h-auto p-1"
+                                        variant="ghost"
+                                        className="text-red-500 hover:text-red-700 h-auto p-1 text-xs mt-2"
                                     >
-                                         {/* Simple 'x' or icon */}
-                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                        Remove Current Resume from Profile
                                     </Button>
                                 )}
                             </div>
                         )}
-                    </div>
-                  </div>
 
+                        <div>
+                            <Label className="block text-sm font-medium text-gray-700">
+                                Upload New Resume:
+                            </Label>
+                            <div className="mt-1 flex items-center gap-3">
+                                <Input
+                                    id="resume-file-upload"
+                                    type="file"
+                                    onChange={handleFileChange}
+                                    ref={fileInputRef}
+                                    className="sr-only"
+                                />
+                                <Label
+                                    htmlFor="resume-file-upload"
+                                    className={`flex items-center justify-center py-2 px-4 border rounded-md shadow-sm text-sm font-medium transition-colors duration-200 cursor-pointer
+                                        ${uploading ? 'bg-gray-200 text-gray-600 cursor-not-allowed' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100'}
+                                    `}
+                                    tabIndex={uploading ? -1 : 0}
+                                    aria-disabled={uploading}
+                                >
+                                    {file ? 'Change File' : 'Choose File'}
+                                </Label>
 
-                  {/* Upload Button */}
-                  <Button
-                    type="submit"
-                    disabled={!file || uploading}
-                    className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white
-                      ${!file || uploading ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#4A3AFF] hover:bg-[#6357FF] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'}
-                    `}
-                  >
-                    {uploading ? 'Uploading...' : 'Upload Resume'}
-                  </Button>
-                </form>
+                                {file && (
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm text-gray-600 truncate max-w-[150px] sm:max-w-xs">{file.name}</span>
+                                        {!uploading && (
+                                            <Button
+                                                type="button"
+                                                onClick={() => {
+                                                    setFile(null); // Clear selected file in input
+                                                    setUploadError(null);
+                                                    setUploadedFileUrl(null);
+                                                    if (fileInputRef.current) {
+                                                        fileInputRef.current.value = '';
+                                                    }
+                                                }}
+                                                size="sm"
+                                                variant="ghost"
+                                                className="text-red-500 hover:text-red-700 h-auto p-1"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                            </Button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
 
-                {/* Status/Error/Link Display for File Upload */}
+                        <Button
+                            type="submit"
+                            disabled={!file || uploading}
+                            className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white
+                                ${!file || uploading ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#4A3AFF] hover:bg-[#6357FF] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'}
+                            `}
+                        >
+                            {uploading ? 'Uploading...' : 'Upload New Resume'}
+                        </Button>
+                    </form>
+                )}
+
                 {uploadError && (
-                  <p className="mt-4 text-sm text-red-600 text-center">Error: {uploadError}</p>
+                    <p className="mt-4 text-sm text-red-600 text-center">Error: {uploadError}</p>
                 )}
 
                 {uploadedFileUrl && (
-                  <div className="mt-4 text-center">
-                    <p className="text-sm font-medium text-gray-700 mb-2">Resume uploaded successfully!</p>
-                    <a
-                      href={uploadedFileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline break-all"
-                    >
-                       View Uploaded Resume
-                    </a>
-                  </div>
+                    <div className="mt-4 text-center">
+                        <p className="text-sm font-medium text-gray-700 mb-2">Resume uploaded successfully!</p>
+                        <a
+                            href={uploadedFileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline break-all"
+                        >
+                            View Uploaded Resume
+                        </a>
+                    </div>
                 )}
-            </div>{/* --- End File Upload Section --- */}
+            </div>
+            {/* --- End Resume Section --- */}
 
 
             {/* Save/Cancel Buttons for Profile Edit */}
             {isEditing && (
                  <div className="mt-6 flex justify-end gap-2">
                  <Button
-                    onClick={() => {
-                         setIsEditing(false);
-                         // Reset file upload state when cancelling edit
-                         setFile(null);
-                         setUploadError(null);
-                         setUploadedFileUrl(null);
-                         if (fileInputRef.current) {
-                            fileInputRef.current.value = '';
-                        }
-                       }}
-                    className="border border-gray-300 bg-white text-gray-700 py-2 px-4 rounded h-[36px] sm:h-[40px] text-sm flex items-center justify-center hover:bg-gray-100 hover:cursor-pointer transition-colors duration-200"
+                   onClick={() => {
+                       setIsEditing(false);
+                       // Reset file upload state when cancelling edit
+                       setFile(null);
+                       setUploadError(null);
+                       setUploadedFileUrl(null);
+                       if (fileInputRef.current) {
+                           fileInputRef.current.value = '';
+                       }
+                       // Re-fetch data to revert any unsaved changes if needed (optional)
+                       // Or, simply reset userData to the state before editing, if you saved a copy
+                   }}
+                   className="border border-gray-300 bg-white text-gray-700 py-2 px-4 rounded h-[36px] sm:h-[40px] text-sm flex items-center justify-center hover:bg-gray-100 hover:cursor-pointer transition-colors duration-200"
                  >
-                    Cancel
+                   Cancel
                  </Button>
                  <Button
-                    onClick={handleUpdate}
-                    className="border bg-white border-[#4A3AFF] text-[#4A3AFF] py-2 px-4 rounded h-[36px] sm:h-[40px] text-sm flex items-center justify-center hover:bg-[#F0EDFF] hover:cursor-pointer hover:text-[#6357FF] transition-colors duration-200"
+                   onClick={handleUpdate}
+                   className="border bg-white border-[#4A3AFF] text-[#4A3AFF] py-2 px-4 rounded h-[36px] sm:h-[40px] text-sm flex items-center justify-center hover:bg-[#F0EDFF] hover:cursor-pointer hover:text-[#6357FF] transition-colors duration-200"
                  >
-                    Save Changes
+                   Save Changes
                  </Button>
                </div>
             )}
