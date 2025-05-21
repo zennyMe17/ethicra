@@ -13,12 +13,13 @@ export const ensureUserDocExists = async () => {
     await setDoc(userRef, {
       email: user.email,
       name: "",
-      phoneNumber: "", // Added phoneNumber
-      location: {       // Added location object
+      phoneNumber: "",
+      location: {
         country: "",
         state: "",
         city: "",
       },
+      resumeUrl: "", // Added the resumeUrl field, initialized as an empty string
     });
   }
 };
