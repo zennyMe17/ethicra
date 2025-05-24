@@ -170,8 +170,8 @@ const Page = () => {
               height={300}
             />
           </div>
-          <p className="text-xl sm:text-2xl font-semibold mb-3 text-center md:text-left">Ethicra Safeguarding Your Data</p>
-          <p className='text-base text-gray-700 text-center md:text-left'>We protect your data with a Web Application Firewall (WAF) to block cyber threats and AES encryption for secure storage and transfer. OAuth 2.0, JWT, and Multi-Factor Authentication (MFA) ensure only authorized access. Real-time monitoring and audit logs help detect and prevent security risks.</p>
+          <p className="text-xl sm:text-2xl font-semibold mb-3 text-center md:text-left">Ethicra Safeguarding Your`s Data</p>
+          <p className='text-base text-gray-700 text-center md:text-left'>We protect your data with a Web Application Firewall (WAF) to block cyber threats and AES encryption for secure storage and transfer. OAuth 2.0, JWT, and Multi-Factor Authentication (MFA),AWS S3 ensure only authorized access. Real-time monitoring and audit logs help detect and prevent security risks.</p>
         </div>
       </div>
     </div>

@@ -52,12 +52,12 @@ export default function VapiInterviewBot() {
         if (callIdAtEnd) {
             setStatus(`Interview Ended. Call ID: ${callIdAtEnd}`);
             console.log(`SUCCESS: Call ended. The Call ID was: ${callIdAtEnd}`);
-            setTranscriptCallId(callIdAtEnd); 
+            setTranscriptCallId(callIdAtEnd);
         } else {
             console.error("ERROR: Call ended, but currentCallIdRef.current was NULL.");
             setStatus("Interview Ended (Call ID not found)");
         }
-        
+
         currentCallIdRef.current = null;
         console.log("[DEBUG] currentCallIdRef.current reset after call end processing.");
 
@@ -156,10 +156,10 @@ export default function VapiInterviewBot() {
         setIsLoading(true);
         setErrorMessage(null);
         setStatus("Initiating Interview...");
-        setTranscriptOutput(null); 
+        setTranscriptOutput(null);
         setEvaluationResult(null); // Clear previous evaluation output
-        
-        currentCallIdRef.current = null; 
+
+        currentCallIdRef.current = null;
         console.log("[DEBUG] currentCallIdRef.current reset before new call attempt.");
 
         try {
@@ -248,7 +248,7 @@ export default function VapiInterviewBot() {
         }
 
         setIsFetchingTranscript(true);
-        setTranscriptOutput(null); 
+        setTranscriptOutput(null);
         setEvaluationResult(null); // Clear evaluation on new fetch
         setErrorMessage(null);
 
@@ -281,7 +281,7 @@ export default function VapiInterviewBot() {
             setEvaluationResult("Please fetch a valid transcript first.");
             return;
         }
-        
+
         setIsEvaluating(true);
         setEvaluationResult(null); // Clear previous evaluation
         setErrorMessage(null); // Clear any old errors
