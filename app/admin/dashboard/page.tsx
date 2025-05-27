@@ -5,70 +5,56 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/app/firebase/firebaseConfig';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, updateDoc } from 'firebase/firestore';
 
 // Import Shadcn UI components and utils
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge"; // Import Badge
-import { Separator } from "@/components/ui/separator"; // For dividing sections
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator"; // Keep if you want to use it elsewhere, though no longer explicitly needed for activity
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
 // Assuming you have icons from lucide-react installed
-import { Users, ShoppingCart, Package, CreditCard, TrendingUp, AlertCircle, ShieldAlert } from 'lucide-react';
+import { ShieldAlert, FileText, CheckCircle } from 'lucide-react'; // Reduced icons to only what's needed
 
-// Placeholder data (replace with actual data fetching logic)
-const stats = [
-  { title: "Total Users", value: "2,350", icon: <Users className="w-4 h-4 text-muted-foreground" /> },
-  { title: "Total Orders", value: "+150", icon: <ShoppingCart className="w-4 h-4 text-muted-foreground" /> },
-  { title: "Products In Stock", value: "1,234", icon: <Package className="w-4 h-4 text-muted-foreground" /> },
-  { title: "Total Revenue (30d)", value: "$45,231.89", icon: <CreditCard className="w-4 h-4 text-muted-foreground" /> },
-];
-
-const recentActivities = [
-  { id: 1, description: "New user registered", timestamp: "10 min ago", type: "user" },
-  { id: 2, description: "Order #1021 placed", timestamp: "1h ago", type: "order" },
-  { id: 3, description: "Product 'Gadget Pro' updated", timestamp: "2h ago", type: "product" },
-  { id: 4, description: "Received new support ticket", timestamp: "5h ago", type: "support" },
-];
-
-const quickLinks = [
-  { label: "Manage Users", href: "/admin/users", icon: <Users className="mr-2 h-4 w-4" /> },
-  { label: "Manage Products", href: "/admin/products", icon: <Package className="mr-2 h-4 w-4" /> },
-  { label: "View Orders", href: "/admin/orders", icon: <ShoppingCart className="mr-2 h-4 w-4" /> },
-  { label: "View Reports", href: "/admin/reports", icon: <TrendingUp className="mr-2 h-4 w-4" /> },
-  { label: "Manage Settings", href: "/admin/settings", icon: null }, // Example without icon
-];
-
-// Helper function to determine badge variant based on type (Optional)
-const getActivityBadgeVariant = (type: string) => {
-  switch (type) {
-    case 'user':
-      return 'default'; // or 'secondary', 'outline', 'destructive'
-    case 'order':
-      return 'secondary'; // Choose appropriate variants
-    case 'product':
-      return 'outline';
-    case 'support':
-      return 'destructive';
-    default:
-      return 'secondary';
-  }
+// Define User type for clarity
+interface AppUser {
+  uid: string;
+  email: string;
+  name: string;
+  interviewStatus: 'none' | 'selected_for_resume_interview' | 'interview_scheduled' | 'interview_completed' | 'rejected_after_interview';
+  resumeUrl?: string; // Assuming you might have a link to their resume
 }
 
 const AdminLandingPage = () => {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false); // State to check if the user is an admin
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [users, setUsers] = useState<AppUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
 
+  // Auth state listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       setLoading(false);
     });
-
     return () => unsubscribe();
-  }, [router]);
+  }, []);
 
+  // Admin role check
   useEffect(() => {
     const checkAdminRole = async () => {
       if (currentUser) {
@@ -78,17 +64,62 @@ const AdminLandingPage = () => {
           setIsAdmin(docSnap.exists());
         } catch (error) {
           console.error("Error checking admin role:", error);
-          setIsAdmin(false); // Assume not admin on error
+          setIsAdmin(false);
         }
       } else {
         setIsAdmin(false);
       }
     };
-
     if (!loading) {
       checkAdminRole();
     }
   }, [currentUser, loading]);
+
+  // Fetch all users
+  useEffect(() => {
+    const fetchUsers = async () => {
+      setLoadingUsers(true);
+      try {
+        const usersCollectionRef = collection(db, "users"); // Assuming your users are in a 'users' collection
+        const querySnapshot = await getDocs(usersCollectionRef);
+        const usersList: AppUser[] = querySnapshot.docs.map(doc => ({
+          uid: doc.id,
+          ...doc.data() as Omit<AppUser, 'uid'>,
+          interviewStatus: doc.data().interviewStatus || 'none',
+        }));
+        setUsers(usersList);
+      } catch (error) {
+        console.error("Error fetching users:", error);
+      } finally {
+        setLoadingUsers(false);
+      }
+    };
+
+    if (isAdmin) {
+      fetchUsers();
+    }
+  }, [isAdmin]);
+
+  // Function to handle selecting user for interview
+  const handleSelectForInterview = async (userUid: string) => {
+    try {
+      const userRef = doc(db, "users", userUid);
+      await updateDoc(userRef, {
+        interviewStatus: 'selected_for_resume_interview',
+      });
+      // Update local state to reflect the change
+      setUsers(prevUsers =>
+        prevUsers.map(user =>
+          user.uid === userUid ? { ...user, interviewStatus: 'selected_for_resume_interview' } : user
+        )
+      );
+      alert(`User ${userUid} selected for resume interview!`);
+      // Potentially trigger a serverless function here to send an email notification to the user
+    } catch (error) {
+      console.error("Error selecting user for interview:", error);
+      alert("Failed to select user for interview. Please try again.");
+    }
+  };
 
   if (loading) {
     return <div className="flex justify-center items-center h-screen"><p className="text-lg text-gray-700">Checking authentication...</p></div>;
@@ -114,96 +145,98 @@ const AdminLandingPage = () => {
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-muted/40">
-      {/* Sidebar placeholder (optional, depending on your layout) */}
-      {/* <aside className="fixed inset-y-0 left-0 z-10 w-14 flex-col border-r bg-background sm:flex">
-        {/* Sidebar content goes here */}
-      {/* </aside> */}
-
-      <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-14 w-full"> {/* Adjust pl-14 if sidebar is used */}
-        {/* Header */}
+      <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-14 w-full">
         <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
           <h1 className="text-xl font-semibold md:text-2xl">Admin Dashboard</h1>
-          {/* Add any header elements like user menu, search, etc. here */}
         </header>
 
-        {/* Main Content Area */}
-        <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 lg:grid-cols-3 xl:grid-cols-3">
-          {/* Left Column (Stats and Quick Links) */}
-          <div className="grid auto-rows-max items-start gap-4 md:gap-8 lg:col-span-2">
-            {/* Welcome Card (Optional - can remove if header is sufficient) */}
+        <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 lg:grid-cols-1 xl:grid-cols-1"> {/* Changed grid-cols to 1 */}
+          <div className="grid auto-rows-max items-start gap-4 md:gap-8 lg:col-span-1"> {/* Changed col-span to 1 */}
+
+            {/* Resume Interview Candidates */}
             <Card>
               <CardHeader>
-                <CardTitle>Welcome Back, Admin!</CardTitle>
-                <CardDescription>Here`s a quick overview of your platform.</CardDescription>
+                <CardTitle className="text-xl">Resume Interview Candidates</CardTitle>
+                <CardDescription>Manage interview status for registered users.</CardDescription>
               </CardHeader>
-            </Card>
-
-            {/* Stats Grid */}
-            <div className="grid gap-4 md:grid-cols-2 md:gap-8">
-              {stats.map((stat, index) => (
-                <Card key={index}>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-                    {stat.icon}
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{stat.value}</div>
-                    {/* Optional: Add a change indicator */}
-                    {/* <p className="text-xs text-muted-foreground">+20.1% from last month</p> */}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
-            {/* Quick Actions Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Quick Actions</CardTitle>
-                <CardDescription>Jump to important sections.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                {quickLinks.map((link, index) => (
-                  <Button asChild key={index} variant="outline" className="flex items-center justify-start px-4 py-2">
-                    <Link href={link.href} className="flex items-center">
-                      {link.icon}
-                      {link.label}
-                    </Link>
-                  </Button>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Right Column (Recent Activity) */}
-          <div className="grid auto-rows-max items-start gap-4 md:gap-8">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xl">Recent Activity</CardTitle>
-                <CardDescription>
-                  Your latest platform updates.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4">
-                {recentActivities.map((activity, index) => (
-                  <React.Fragment key={activity.id}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {/* Icon indicator based on type */}
-                        {activity.type === 'user' && <Users className="h-4 w-4 text-muted-foreground" />}
-                        {activity.type === 'order' && <ShoppingCart className="h-4 w-4 text-muted-foreground" />}
-                        {activity.type === 'product' && <Package className="h-4 w-4 text-muted-foreground" />}
-                        {activity.type === 'support' && <AlertCircle className="h-4 w-4 text-muted-foreground" />}
-                        <span className="text-sm">{activity.description}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {/* Use Badge for type */}
-                        <Badge variant={getActivityBadgeVariant(activity.type)}>{activity.type}</Badge>
-                        <span className="text-xs text-muted-foreground">{activity.timestamp}</span>
-                      </div>
-                    </div>
-                    {index < recentActivities.length - 1 && <Separator />} {/* Add separator between items */}
-                  </React.Fragment>
-                ))}
+              <CardContent>
+                {loadingUsers ? (
+                  <p className="text-gray-600">Loading users...</p>
+                ) : users.length === 0 ? (
+                  <p className="text-gray-600">No users found.</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Interview Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {users.map((user) => (
+                        <TableRow key={user.uid}>
+                          <TableCell className="font-medium">{user.name || 'N/A'}</TableCell>
+                          <TableCell>{user.email}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                user.interviewStatus === 'selected_for_resume_interview'
+                                  ? 'default'
+                                  : user.interviewStatus === 'interview_completed'
+                                    ? 'secondary' // You might need to define a 'success' variant in your badge component or use 'outline'
+                                    : user.interviewStatus === 'rejected_after_interview'
+                                      ? 'destructive'
+                                      : 'outline' // 'outline' for 'none' or other states
+                              }
+                            >
+                              {user.interviewStatus.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {user.interviewStatus === 'none' && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                    <FileText className="mr-2 h-4 w-4" /> Select for Interview
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This action will mark {user.name || user.email} as "selected for resume interview".
+                                      An email notification (if configured) might be sent to them.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleSelectForInterview(user.uid)}>
+                                      Confirm Selection
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                            {user.interviewStatus === 'selected_for_resume_interview' && (
+                              <Button variant="secondary" size="sm" disabled>
+                                Selected
+                              </Button>
+                            )}
+                            {/* You can add more actions here based on the interview status */}
+                            {/* For example, a button to mark as 'interview_scheduled' or 'interview_completed' */}
+                            {/* {user.interviewStatus === 'selected_for_resume_interview' && (
+                                <Button variant="ghost" size="sm" className="ml-2">
+                                  <CheckCircle className="mr-2 h-4 w-4" /> Schedule Interview
+                                </Button>
+                            )} */}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </div>
