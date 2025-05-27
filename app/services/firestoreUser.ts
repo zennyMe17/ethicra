@@ -21,8 +21,9 @@ export const ensureUserDocExists = async () => {
         city: "",
       },
       resumeUrl: "", // Added the resumeUrl field, initialized as an empty string
-      // NEW: Initialize interviewStatus for new users
-      interviewStatus: 'none', // Default status for new users
+      // UPDATED: Initialize appliedJobs as an empty object for new users
+      // The single 'interviewStatus' field is now replaced by per-job statuses within 'appliedJobs'
+      appliedJobs: {},
     });
   }
 };
