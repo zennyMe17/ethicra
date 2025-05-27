@@ -4,23 +4,25 @@
 import { useEffect, useState } from "react";
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
-import { auth, db } from "@/app/firebase/firebaseConfig"; // Import firebase config
+import { auth, db } from "@/app/firebase/firebaseConfig";
 import { doc, getDoc } from "firebase/firestore";
 import { User, onAuthStateChanged } from "firebase/auth";
-import { useRouter } from "next/navigation"; // Import useRouter
-import { Button } from "@/components/ui/button"; // Import Button for consistent styling
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 
-// Define the UserData interface to match your Firestore structure
 interface UserData {
   name: string;
-  resumeUrl?: string; // resumeUrl is optional as it might not exist
+  resumeUrl?: string;
+  interviewStatus?: 'none' | 'selected_for_resume_interview' | 'interview_scheduled' | 'interview_completed' | 'rejected_after_interview';
 }
 
 const DashboardPage = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [userName, setUserName] = useState<string>("User"); // Default name
-  const [userResumeUrl, setUserResumeUrl] = useState<string | null>(null); // State for resume URL
+  const [userName, setUserName] = useState<string>("User");
+  const [userResumeUrl, setUserResumeUrl] = useState<string | null>(null);
+  // Initialize with a default value to prevent 'undefined' in subsequent renders
+  const [interviewStatus, setInterviewStatus] = useState<UserData['interviewStatus']>('none');
   const router = useRouter();
 
   useEffect(() => {
@@ -33,26 +35,26 @@ const DashboardPage = () => {
 
           if (userSnap.exists()) {
             const data = userSnap.data() as UserData;
-            setUserName(data.name || "User"); // Set user's name from Firestore
-            setUserResumeUrl(data.resumeUrl || null); // Set resume URL from Firestore
+            setUserName(data.name || "User");
+            setUserResumeUrl(data.resumeUrl || null);
+            // Fix: Provide a fallback for interviewStatus if it's undefined in Firestore
+            setInterviewStatus(data.interviewStatus || 'none');
           } else {
             console.log("No user document found for this user.");
-            // Optionally, you might want to redirect new users to a profile setup page
-            // router.push("/profile-setup");
+            // Consider creating the user doc here if it should always exist when a user logs in
+            // await ensureUserDocExists(); // If you want to ensure it's created on dashboard load
           }
         } catch (error) {
           console.error("Error fetching user data:", error);
         }
       } else {
-        // User is not logged in. ProtectedRoute should handle redirection,
-        // but this ensures state is clear.
-        router.push("/login"); // Redirect to login if not authenticated
+        router.push("/login");
       }
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [router]); // Include router in dependencies to avoid lint warnings
+  }, [router]);
 
   if (loading) {
     return (
@@ -62,28 +64,24 @@ const DashboardPage = () => {
     );
   }
 
-  // If currentUser is null after loading, ProtectedRoute should have already redirected.
-  // This check serves as a final safeguard.
   if (!currentUser) {
-      return null; // ProtectedRoute will handle the redirect
+    return null;
   }
+
+  const canStartResumeInterview = userResumeUrl && interviewStatus === 'selected_for_resume_interview';
 
   return (
     <ProtectedRoute>
-      {/* Main Container - Matches Profile Page */}
       <div className="bg-[#FAFAFC] py-10 min-h-screen">
-        <div className="max-w-3xl mx-auto rounded-lg shadow-xl overflow-hidden"> {/* Shadow and rounded corners */}
-          {/* Header Section - Matches Profile Page */}
+        <div className="max-w-3xl mx-auto rounded-lg shadow-xl overflow-hidden">
           <div className="bg-transparent py-6 px-6 sm:px-12 flex justify-between items-center">
             <h1 className="text-2xl sm:text-3xl font-semibold text-indigo-700 tracking-tight">
                 Welcome, {userName}!
             </h1>
           </div>
 
-          {/* Main Content Area - Matches Profile Page's inner padding */}
-          <div className="p-6 sm:px-12 sm:py-8 space-y-8"> {/* Added space-y for consistent spacing */}
+          <div className="p-6 sm:px-12 sm:py-8 space-y-8">
 
-            {/* Profile Summary Section */}
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
               <h2 className="text-xl font-semibold text-gray-800 mb-4">Your Information</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -112,11 +110,18 @@ const DashboardPage = () => {
                     </p>
                   )}
                 </div>
+                <div>
+                  <p className="text-gray-700 font-medium">Interview Status:</p>
+                  <p className="text-lg text-gray-700 font-bold">
+                    {/* Ensure interviewStatus is never undefined here for display */}
+                    {(interviewStatus || 'none').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())}
+                  </p>
+                </div>
               </div>
               <div className="mt-6 text-right">
                 <Link href="/profile" passHref>
                   <Button
-                    variant="ghost" // Use shadcn/ui ghost variant for similar look
+                    variant="ghost"
                     className="text-sm text-indigo-600 hover:underline font-medium"
                   >
                     Go to Profile to Manage Data
@@ -125,42 +130,45 @@ const DashboardPage = () => {
               </div>
             </div>
 
-            {/* Interview Navigation Section */}
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
               <h2 className="text-xl font-semibold text-gray-800 mb-4">Start an Interview</h2>
               <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4 justify-center">
                 <Link href="/interview-practice" passHref>
                   <Button
-                    className="w-full sm:w-auto px-6 py-3 bg-[#4A3AFF] hover:bg-[#6357FF] text-white" // Consistent primary button style
+                    className="w-full sm:w-auto px-6 py-3 bg-[#4A3AFF] hover:bg-[#6357FF] text-white"
                   >
                     Choose Practice Interview
                   </Button>
                 </Link>
 
                 <Link
-                  href={`/interview?type=resume-based&resumeUrl=${encodeURIComponent(userResumeUrl || '')}`}
+                  href={canStartResumeInterview ? `/interview?type=resume-based&resumeUrl=${encodeURIComponent(userResumeUrl || '')}` : '#'}
                   passHref
                 >
                   <Button
                     className={`w-full sm:w-auto px-6 py-3
-                      ${userResumeUrl ? 'bg-[#4A3AFF] hover:bg-[#6357FF] text-white' : 'bg-gray-400 text-gray-700 cursor-not-allowed'}`
+                      ${canStartResumeInterview ? 'bg-[#4A3AFF] hover:bg-[#6357FF] text-white' : 'bg-gray-400 text-gray-700 cursor-not-allowed'}`
                     }
-                    disabled={!userResumeUrl} // Disable button if no resume URL
+                    disabled={!canStartResumeInterview}
                   >
                     Start Resume-Based Interview
                   </Button>
                 </Link>
               </div>
+              {!canStartResumeInterview && (
+                <p className="text-sm text-red-500 mt-4 text-center">
+                  You need to have an uploaded resume and be selected for a resume interview by an administrator to start a resume-based interview.
+                </p>
+              )}
             </div>
 
-            {/* Other dashboard content */}
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-center">
               <h2 className="text-xl font-semibold text-gray-800 mb-4">Coming Soon</h2>
               <p className="text-gray-700">Here you can track your progress, view past interviews, and more.</p>
             </div>
 
-          </div> {/* End of Main Content Area */}
-        </div> {/* End of max-w-3xl container */}
+          </div>
+        </div>
       </div>
     </ProtectedRoute>
   );
