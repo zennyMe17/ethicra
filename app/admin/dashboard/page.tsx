@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -11,9 +11,9 @@ import { doc, getDoc, collection, getDocs, updateDoc } from 'firebase/firestore'
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
+// import { Separator } from "@/components/ui/separator"; // REMOVED: No longer explicitly needed and was unused
+import { Table, TableBody, TableTableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"; // Corrected TableCell import
+import { // These are correctly used
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 // Assuming you have icons from lucide-react installed
-import { ShieldAlert, FileText, CheckCircle, ExternalLink } from 'lucide-react'; // Added ExternalLink icon
+import { ShieldAlert, FileText, ExternalLink } from 'lucide-react'; // REMOVED: CheckCircle as it was unused
 
 // Define User type for clarity
 interface AppUser {
@@ -34,7 +34,7 @@ interface AppUser {
   email: string;
   name: string;
   interviewStatus: 'none' | 'selected_for_resume_interview' | 'interview_scheduled' | 'interview_completed' | 'rejected_after_interview';
-  resumeUrl?: string; // This field is already here
+  resumeUrl?: string; // Assuming you might have a link to their resume
 }
 
 const AdminLandingPage = () => {
@@ -80,14 +80,13 @@ const AdminLandingPage = () => {
     const fetchUsers = async () => {
       setLoadingUsers(true);
       try {
-        const usersCollectionRef = collection(db, "users");
+        const usersCollectionRef = collection(db, "users"); // Assuming your users are in a 'users' collection
         const querySnapshot = await getDocs(usersCollectionRef);
         const usersList: AppUser[] = querySnapshot.docs.map(doc => ({
           uid: doc.id,
           ...doc.data() as Omit<AppUser, 'uid'>,
-          // Ensure resumeUrl also has a fallback if not present for older docs
           resumeUrl: doc.data().resumeUrl || undefined, // Keep as undefined if not present, consistent with optional interface
-          interviewStatus: doc.data().interviewStatus || 'none', // Fallback for interviewStatus
+          interviewStatus: doc.data().interviewStatus || 'none',
         }));
         setUsers(usersList);
       } catch (error) {
@@ -172,7 +171,7 @@ const AdminLandingPage = () => {
                       <TableRow>
                         <TableHead>Name</TableHead>
                         <TableHead>Email</TableHead>
-                        <TableHead>Resume</TableHead> {/* Added Resume column header */}
+                        <TableHead>Resume</TableHead>
                         <TableHead>Interview Status</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
@@ -182,7 +181,7 @@ const AdminLandingPage = () => {
                         <TableRow key={user.uid}>
                           <TableCell className="font-medium">{user.name || 'N/A'}</TableCell>
                           <TableCell>{user.email}</TableCell>
-                          <TableCell> {/* Resume URL Cell */}
+                          <TableCell>
                             {user.resumeUrl ? (
                               <a
                                 href={user.resumeUrl}
@@ -223,7 +222,7 @@ const AdminLandingPage = () => {
                                   <AlertDialogHeader>
                                     <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                                     <AlertDialogDescription>
-                                      This action will mark {user.name || user.email} as "selected for resume interview".
+                                      This action will mark {user.name || user.email} as &quot;selected for resume interview&quot;.
                                       An email notification (if configured) might be sent to them.
                                     </AlertDialogDescription>
                                   </AlertDialogHeader>
@@ -241,12 +240,6 @@ const AdminLandingPage = () => {
                                 Selected
                               </Button>
                             )}
-                            {/* You can add more actions here based on the interview status */}
-                            {/* {user.interviewStatus === 'selected_for_resume_interview' && (
-                                <Button variant="ghost" size="sm" className="ml-2">
-                                  <CheckCircle className="mr-2 h-4 w-4" /> Schedule Interview
-                                </Button>
-                            )} */}
                           </TableCell>
                         </TableRow>
                       ))}
