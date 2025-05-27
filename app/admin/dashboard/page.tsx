@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 // import { Separator } from "@/components/ui/separator"; // REMOVED: No longer explicitly needed and was unused
-import { Table, TableBody, TableTableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"; // Corrected TableCell import
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"; // Corrected TableCell import
 import { // These are correctly used
   AlertDialog,
   AlertDialogAction,
