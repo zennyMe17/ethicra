@@ -4,8 +4,8 @@
 import { useState } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import VapiInterviewBot from '@/components/VapiInterviewBot';
-import { Button } from "@/components/ui/button"; // Import Button for consistent styling
-//import Link from 'next/link'; // Import Link if you want to use it for the "Back to Selection" button
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"; // Import Card components
 
 // Define your interview types and their corresponding prompts
 const interviewTypes = [
@@ -35,28 +35,28 @@ export default function InterviewPracticePage() {
   return (
     <ProtectedRoute>
       {/* Main Container - Consistent with Profile and Dashboard */}
-      <div className="bg-[#FAFAFC] py-10 min-h-screen flex flex-col items-center"> {/* Removed justify-center for better top alignment */}
+      <div className="bg-[#FAFAFC] py-10 min-h-screen flex flex-col items-center">
         {selectedPrompt ? (
           // If a prompt is selected, render the VapiInterviewBot
-          <div className="max-w-3xl mx-auto w-full rounded-lg shadow-xl overflow-hidden mt-10"> {/* Adjusted max-width and styling */}
+          <div className="max-w-3xl mx-auto w-full rounded-lg shadow-xl overflow-hidden mt-10">
             <div className="bg-transparent py-6 px-6 sm:px-12">
               <Button
                 onClick={handleBackToSelection}
-                variant="ghost" // Use shadcn/ui ghost variant
-                className="text-indigo-600 hover:text-indigo-800 text-sm flex items-center p-0 h-auto" // Adjusted padding and height
+                variant="ghost"
+                className="text-indigo-600 hover:text-indigo-800 text-sm flex items-center p-0 h-auto"
               >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
                 Back to Interview Selection
               </Button>
             </div>
             {/* VapiInterviewBot will handle its own internal styling */}
-            <div className="p-6 sm:px-12 sm:py-8 bg-white"> {/* Added white background and padding */}
-               <VapiInterviewBot interviewPrompt={selectedPrompt} interviewType={selectedType || "Practice"} />
+            <div className="p-6 sm:px-12 sm:py-8 bg-white">
+              <VapiInterviewBot interviewPrompt={selectedPrompt} interviewType={selectedType || "Practice"} />
             </div>
           </div>
         ) : (
           // Otherwise, show the interview type selection
-          <div className="max-w-3xl mx-auto w-full rounded-lg shadow-xl overflow-hidden mt-10"> {/* Applied same container styling */}
+          <div className="max-w-4xl mx-auto w-full rounded-lg shadow-xl overflow-hidden mt-10"> {/* Adjusted max-width to 4xl for consistency with dashboard */}
             {/* Header Section - Consistent with Profile and Dashboard */}
             <div className="bg-transparent py-6 px-6 sm:px-12 text-center">
               <h1 className="text-2xl sm:text-3xl font-semibold text-indigo-700 tracking-tight mb-4">
@@ -67,20 +67,32 @@ export default function InterviewPracticePage() {
               </p>
             </div>
 
-            {/* Interview Type Cards */}
-            <div className="p-6 sm:px-12 sm:py-8 bg-white grid grid-cols-1 md:grid-cols-2 gap-6"> {/* Added white background and padding */}
-              {interviewTypes.map((type) => (
-                <div
-                  key={type.id}
-                  onClick={() => handleSelectInterview(type.prompt, type.name)}
-                  // Styling for each card - consistent with inner cards on Dashboard/Profile
-                  className="block bg-gray-50 hover:bg-indigo-50 border border-gray-200 rounded-lg p-5 cursor-pointer transition duration-200 ease-in-out transform hover:-translate-y-1 hover:shadow-md"
-                >
-                  <h2 className="text-xl font-semibold text-indigo-700 mb-2">{type.name}</h2>
-                  <p className="text-gray-600 text-sm">{type.prompt.substring(0, 100)}...</p>
-                </div>
-              ))}
-            </div>
+            {/* Interview Type Cards - Wrapped in a Card for consistent outer styling */}
+            <Card className="bg-white"> {/* Outer Card for the list of interview types */}
+              <CardContent className="p-6 sm:px-12 sm:py-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                {interviewTypes.map((type) => (
+                  <Card
+                    key={type.id}
+                    className="border-l-4 border-indigo-500 hover:shadow-lg transition-shadow duration-200" // Consistent border and hover effect
+                  >
+                    <CardHeader>
+                      <CardTitle className="text-lg">{type.name}</CardTitle>
+                      <CardDescription className="line-clamp-3"> {/* Use line-clamp for description */}
+                        {type.prompt.substring(0, 100)}...
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex justify-end pt-4"> {/* Align button to the right */}
+                      <Button
+                        onClick={() => handleSelectInterview(type.prompt, type.name)}
+                        className="bg-[#4A3AFF] hover:bg-[#6357FF] text-white"
+                      >
+                        Start Interview
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </CardContent>
+            </Card>
           </div>
         )}
       </div>
