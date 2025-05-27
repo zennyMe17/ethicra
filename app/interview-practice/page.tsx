@@ -5,7 +5,7 @@ import { useState } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import VapiInterviewBot from '@/components/VapiInterviewBot';
 import { Button } from "@/components/ui/button"; // Import Button for consistent styling
-import Link from 'next/link'; // Import Link if you want to use it for the "Back to Selection" button
+//import Link from 'next/link'; // Import Link if you want to use it for the "Back to Selection" button
 
 // Define your interview types and their corresponding prompts
 const interviewTypes = [
