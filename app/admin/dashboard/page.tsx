@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -11,7 +11,7 @@ import { doc, getDoc, collection, getDocs, updateDoc } from 'firebase/firestore'
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator"; // Keep if you want to use it elsewhere, though no longer explicitly needed for activity
+import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   AlertDialog,
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 // Assuming you have icons from lucide-react installed
-import { ShieldAlert, FileText, CheckCircle } from 'lucide-react'; // Reduced icons to only what's needed
+import { ShieldAlert, FileText, CheckCircle, ExternalLink } from 'lucide-react'; // Added ExternalLink icon
 
 // Define User type for clarity
 interface AppUser {
@@ -34,7 +34,7 @@ interface AppUser {
   email: string;
   name: string;
   interviewStatus: 'none' | 'selected_for_resume_interview' | 'interview_scheduled' | 'interview_completed' | 'rejected_after_interview';
-  resumeUrl?: string; // Assuming you might have a link to their resume
+  resumeUrl?: string; // This field is already here
 }
 
 const AdminLandingPage = () => {
@@ -80,12 +80,14 @@ const AdminLandingPage = () => {
     const fetchUsers = async () => {
       setLoadingUsers(true);
       try {
-        const usersCollectionRef = collection(db, "users"); // Assuming your users are in a 'users' collection
+        const usersCollectionRef = collection(db, "users");
         const querySnapshot = await getDocs(usersCollectionRef);
         const usersList: AppUser[] = querySnapshot.docs.map(doc => ({
           uid: doc.id,
           ...doc.data() as Omit<AppUser, 'uid'>,
-          interviewStatus: doc.data().interviewStatus || 'none',
+          // Ensure resumeUrl also has a fallback if not present for older docs
+          resumeUrl: doc.data().resumeUrl || undefined, // Keep as undefined if not present, consistent with optional interface
+          interviewStatus: doc.data().interviewStatus || 'none', // Fallback for interviewStatus
         }));
         setUsers(usersList);
       } catch (error) {
@@ -150,14 +152,14 @@ const AdminLandingPage = () => {
           <h1 className="text-xl font-semibold md:text-2xl">Admin Dashboard</h1>
         </header>
 
-        <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 lg:grid-cols-1 xl:grid-cols-1"> {/* Changed grid-cols to 1 */}
-          <div className="grid auto-rows-max items-start gap-4 md:gap-8 lg:col-span-1"> {/* Changed col-span to 1 */}
+        <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 lg:grid-cols-1 xl:grid-cols-1">
+          <div className="grid auto-rows-max items-start gap-4 md:gap-8 lg:col-span-1">
 
             {/* Resume Interview Candidates */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-xl">Resume Interview Candidates</CardTitle>
-                <CardDescription>Manage interview status for registered users.</CardDescription>
+                <CardDescription>Manage interview status and view resumes for registered users.</CardDescription>
               </CardHeader>
               <CardContent>
                 {loadingUsers ? (
@@ -170,6 +172,7 @@ const AdminLandingPage = () => {
                       <TableRow>
                         <TableHead>Name</TableHead>
                         <TableHead>Email</TableHead>
+                        <TableHead>Resume</TableHead> {/* Added Resume column header */}
                         <TableHead>Interview Status</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
@@ -179,16 +182,30 @@ const AdminLandingPage = () => {
                         <TableRow key={user.uid}>
                           <TableCell className="font-medium">{user.name || 'N/A'}</TableCell>
                           <TableCell>{user.email}</TableCell>
+                          <TableCell> {/* Resume URL Cell */}
+                            {user.resumeUrl ? (
+                              <a
+                                href={user.resumeUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center text-blue-600 hover:underline"
+                              >
+                                View Resume <ExternalLink className="ml-1 h-4 w-4" />
+                              </a>
+                            ) : (
+                              <span className="text-gray-500 text-sm">Not uploaded</span>
+                            )}
+                          </TableCell>
                           <TableCell>
                             <Badge
                               variant={
                                 user.interviewStatus === 'selected_for_resume_interview'
                                   ? 'default'
                                   : user.interviewStatus === 'interview_completed'
-                                    ? 'secondary' // You might need to define a 'success' variant in your badge component or use 'outline'
+                                    ? 'secondary'
                                     : user.interviewStatus === 'rejected_after_interview'
                                       ? 'destructive'
-                                      : 'outline' // 'outline' for 'none' or other states
+                                      : 'outline'
                               }
                             >
                               {user.interviewStatus.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())}
@@ -225,7 +242,6 @@ const AdminLandingPage = () => {
                               </Button>
                             )}
                             {/* You can add more actions here based on the interview status */}
-                            {/* For example, a button to mark as 'interview_scheduled' or 'interview_completed' */}
                             {/* {user.interviewStatus === 'selected_for_resume_interview' && (
                                 <Button variant="ghost" size="sm" className="ml-2">
                                   <CheckCircle className="mr-2 h-4 w-4" /> Schedule Interview
