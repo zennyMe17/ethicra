@@ -1,3 +1,4 @@
+// app/firebase/firestoreUser.ts
 import { setDoc, doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/app/firebase/firebaseConfig";
 
@@ -20,6 +21,8 @@ export const ensureUserDocExists = async () => {
         city: "",
       },
       resumeUrl: "", // Added the resumeUrl field, initialized as an empty string
+      // NEW: Initialize interviewStatus for new users
+      interviewStatus: 'none', // Default status for new users
     });
   }
 };
