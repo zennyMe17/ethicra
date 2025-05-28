@@ -76,7 +76,7 @@ const AdminLandingPage = () => {
     jobTitle: '',
     description: '',
     requirements: '',
-    applicationDeadline: '', // YYYY-MM-DD
+    applicationDeadline: '', //YYYY-MM-DD
   });
   const [isPostingJob, setIsPostingJob] = useState(false);
   const [isNewJobDialogOpen, setIsNewJobDialogOpen] = useState(false);
@@ -445,7 +445,7 @@ const AdminLandingPage = () => {
                                       <AlertDialogHeader>
                                         <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                                         <AlertDialogDescription>
-                                          This action will mark {applicant.name || applicant.email} as &quot;selected for resume interview&quot; for the job "{job.jobTitle}" at "{job.companyName}".
+                                          This action will mark {applicant.name || applicant.email} as &quot;selected for resume interview&quot; for the job &quot;{job.jobTitle}&quot; at &quot;{job.companyName}&quot;.
                                           An email notification (if configured) might be sent to them.
                                         </AlertDialogDescription>
                                       </AlertDialogHeader>
