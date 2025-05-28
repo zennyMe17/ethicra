@@ -21,6 +21,7 @@ export default function VapiInterviewBot() {
   const vapiRef = useRef<Vapi | null>(null);
   const isCallActiveRef = useRef<boolean>(isCallActive); // Keep this ref for cleanup logic
   const currentCallIdRef = useRef<string | null>(null); // To store call ID for post-call actions
+  const transcriptTimerRef = useRef<NodeJS.Timeout | null>(null); // Ref for the timer
 
   // Function to fetch transcript
   const fetchTranscript = useCallback(async (callId: string) => {
@@ -32,6 +33,7 @@ export default function VapiInterviewBot() {
     setTranscriptOutput(null); // Clear previous transcript output
     setEvaluationResult(null); // Clear previous evaluation output
     setErrorMessage(null); // Clear any previous errors
+    setStatus("Fetching interview results..."); // Update status while fetching
 
     try {
       console.log(`[Auto-Fetch Transcript] Requesting transcript for Call ID: ${callId}`);
@@ -57,6 +59,9 @@ export default function VapiInterviewBot() {
       setErrorMessage(`Error fetching transcript: ${error.message || "Network error"}`);
       console.error("[Auto-Fetch Transcript] Client-side fetch error:", error);
       return null;
+    } finally {
+      // Revert status if there are no further actions (e.g., evaluation)
+      // This is handled by evaluation in this flow, so it's less critical here.
     }
   }, []);
 
@@ -73,6 +78,7 @@ export default function VapiInterviewBot() {
 
     setEvaluationResult(null); // Clear previous evaluation
     setErrorMessage(null); // Clear any old errors
+    setStatus("Analyzing interview performance..."); // Update status during evaluation
 
     try {
       console.log("[Auto-Evaluate Transcript] Sending transcript to OpenAI for evaluation.");
@@ -102,10 +108,12 @@ export default function VapiInterviewBot() {
         `Error evaluating transcript: ${error.message || "Network error"}`
       );
       console.error("[Auto-Evaluate Transcript] Client-side evaluation fetch error:", error);
+    } finally {
+      setStatus(`Interview Ended. Results ready.`); // Final status update
     }
   }, []);
 
-  // Call End Handler - now triggers auto-fetch and auto-evaluate
+  // Call End Handler - now triggers auto-fetch and auto-evaluate with delay
   const handleCallEnd = useCallback(async () => {
     console.log("[VAPI Event] handleCallEnd triggered.");
     setIsCallActive(false);
@@ -116,18 +124,24 @@ export default function VapiInterviewBot() {
     console.log(`[DEBUG] currentCallIdRef.current at handleCallEnd: ${callIdAtEnd}`);
 
     if (callIdAtEnd) {
-      setStatus(`Interview Ended. Call ID: ${callIdAtEnd}. Fetching results...`);
+      setStatus(`Interview Ended. Call ID: ${callIdAtEnd}. Processing results...`);
       console.log(`SUCCESS: Call ended. The Call ID was: ${callIdAtEnd}`);
 
-      // Automatically fetch transcript
-      const fetchedTranscript = await fetchTranscript(callIdAtEnd);
-      if (fetchedTranscript) {
-        // Automatically evaluate transcript if fetched successfully
-        await evaluateTranscript(fetchedTranscript);
-        setStatus(`Interview Ended. Transcript and Evaluation ready.`);
-      } else {
-        setStatus(`Interview Ended. Failed to fetch transcript.`);
+      // Clear any existing timer to prevent multiple triggers
+      if (transcriptTimerRef.current) {
+        clearTimeout(transcriptTimerRef.current);
       }
+
+      // Start a timer to fetch transcript and evaluate after 5 seconds
+      transcriptTimerRef.current = setTimeout(async () => {
+        console.log("[DELAYED ACTION] Initiating transcript fetch after 5 seconds.");
+        const fetchedTranscript = await fetchTranscript(callIdAtEnd);
+        if (fetchedTranscript) {
+          await evaluateTranscript(fetchedTranscript);
+        } else {
+          setStatus(`Interview Ended. Failed to fetch transcript.`);
+        }
+      }, 5000); // 5-second delay
     } else {
       console.error("ERROR: Call ended, but currentCallIdRef.current was NULL.");
       setStatus("Interview Ended (Call ID not found)");
@@ -135,7 +149,7 @@ export default function VapiInterviewBot() {
 
     currentCallIdRef.current = null;
     console.log("[DEBUG] currentCallIdRef.current reset after call end processing.");
-  }, [fetchTranscript, evaluateTranscript]); // Add functions to dependency array for useCallback
+  }, [fetchTranscript, evaluateTranscript]); // Dependencies: publicKey and handleCallEnd (which is useCallback memoized)
 
   useEffect(() => {
     isCallActiveRef.current = isCallActive; // Keep ref updated for cleanup logic
@@ -154,8 +168,8 @@ export default function VapiInterviewBot() {
     }
     const vapi = vapiRef.current; // Get the Vapi instance from the ref
 
-    // !!! IMPORTANT FIX HERE: handleCallStart now takes NO arguments to match type definition
-    const handleCallStart = () => { // <--- CORRECTED LINE: No 'call: any' parameter
+    // handleCallStart now takes NO arguments to match type definition
+    const handleCallStart = () => {
       console.log("[VAPI Event] Call-start event received from Vapi SDK.");
       setIsCallActive(true);
       setIsLoading(false);
@@ -163,8 +177,6 @@ export default function VapiInterviewBot() {
       setStatus("Interview Started");
       // The call ID is now primarily captured when vapi.start() resolves,
       // as per the updated handleStartCall.
-      // If the Vapi SDK *does* pass a 'call' object at runtime despite types,
-      // you could cast it, but for strict type adherence, we get it from start().
     };
 
     const handleSpeechStart = () => setStatus("Interviewer Speaking");
@@ -195,13 +207,19 @@ export default function VapiInterviewBot() {
     return () => {
       console.log("[useEffect] Cleaning up Vapi listeners.");
       if (vapiRef.current) {
-        // Deregister event listeners - ensure we use 'vapi' directly, not 'vapi.current'
+        // Deregister event listeners
         vapi.off("call-start", handleCallStart);
         vapi.off("call-end", handleCallEnd);
         vapi.off("speech-start", handleSpeechStart);
         vapi.off("speech-end", handleSpeechEnd);
         vapi.off("volume-level", handleVolumeLevel);
         vapi.off("error", handleError);
+
+        // Clear any pending transcript timer on unmount
+        if (transcriptTimerRef.current) {
+          clearTimeout(transcriptTimerRef.current);
+          transcriptTimerRef.current = null;
+        }
 
         // Stop the call only if it's still active when component unmounts
         if (isCallActiveRef.current) {
@@ -250,6 +268,10 @@ export default function VapiInterviewBot() {
     setStatus("Initiating Interview...");
 
     currentCallIdRef.current = null; // Ensure fresh call ID for a new call attempt
+    if (transcriptTimerRef.current) { // Clear any previous timers before starting new call
+      clearTimeout(transcriptTimerRef.current);
+      transcriptTimerRef.current = null;
+    }
 
     try {
       // Request microphone permission upfront for a smoother start
@@ -264,14 +286,13 @@ export default function VapiInterviewBot() {
         return; // Stop if permission is denied
       }
 
-      // !!! IMPORTANT FIX HERE: Capture call ID when vapi.start() resolves
+      // Capture call ID when vapi.start() resolves
       const call = await vapiRef.current.start(interviewAssistantConfig);
 
       if (call && call.id) {
         console.log(`[DEBUG] Call started successfully, ID from start(): ${call.id}`);
-        currentCallIdRef.current = call.id; // <--- This is where we ensure the call ID is stored!
-        setStatus("Interview Started"); // Set status here too, or let handleCallStart handle it.
-                                          // It's safer to have it here as well.
+        currentCallIdRef.current = call.id; // This is where we ensure the call ID is stored!
+        setStatus("Interview Started");
       } else {
         console.error("[Start Call] Vapi start returned null or missing call ID.");
         setErrorMessage("Failed to start call: Vapi did not return a valid call object.");
@@ -324,31 +345,51 @@ export default function VapiInterviewBot() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center">
-      <div className="bg-white p-6 sm:p-8 rounded-xl shadow-md w-full relative">
-        <h1 className="text-2xl sm:text-3xl font-bold mb-6 text-center text-gray-800">
-          AI Interview Bot
-        </h1>
-
-        <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 z-10">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-400 to-indigo-600 flex items-center justify-center shadow-lg border-4 border-white">
-            <svg
-              className="w-12 h-12 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 12a1 1 0 01-1 1H4a1 1 0 01-1-1v-1a4 4 0 014-4h10a4 4 0 014 4v1z"
-              ></path>
-            </svg>
-          </div>
+    <div className="flex flex-col items-center justify-center min-h-[400px]">
+      <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-xl w-full max-w-lg mx-auto relative border border-gray-100">
+        {/* Icon (moved to top for better visual hierarchy) */}
+        <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 z-10 bg-gradient-to-br from-purple-500 to-indigo-700 p-3 rounded-full shadow-lg border-4 border-white">
+          <svg
+            className="w-10 h-10 text-white"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 12a1 1 0 01-1 1H4a1 1 0 01-1-1v-1a4 4 0 014-4h10a4 4 0 014 4v1z"
+            ></path>
+          </svg>
         </div>
-        <div className="mt-8"></div>
+
+        <div className="pt-8">
+          <h1 className="text-2xl sm:text-3xl font-extrabold mb-3 text-center text-gray-800">
+            AI Interview Practice
+          </h1>
+          <p className="text-sm text-gray-500 text-center mb-6">
+            Conduct a simulated interview with Nexus AI.
+          </p>
+        </div>
+
+        {/* Status Display */}
+        <div className="mb-6 text-center">
+          <p className="text-gray-700 text-base font-semibold">
+            Status: <span className="font-bold text-blue-600">{status}</span>
+          </p>
+          {isCallActive && (
+            <p className="text-gray-500 text-sm mt-1">
+              Interviewer Volume: {volumeLevel.toFixed(2)}
+            </p>
+          )}
+          {errorMessage && (
+            <p className="text-red-600 text-sm mt-2 font-medium bg-red-50 p-2 rounded-md">
+              {errorMessage}
+            </p>
+          )}
+        </div>
 
         {/* Buttons for Call Control */}
         <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 mb-6">
@@ -356,37 +397,57 @@ export default function VapiInterviewBot() {
             <button
               onClick={handleStartCall}
               disabled={isLoading || !publicKey}
-              className={`flex-1 font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-200
+              className={`flex-1 flex items-center justify-center font-bold py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-300 ease-in-out transform hover:-translate-y-0.5
                                 ${
                                   isLoading || !publicKey
-                                    ? "bg-gray-400 cursor-not-allowed"
+                                    ? "bg-gray-300 text-gray-600 cursor-not-allowed"
                                     : "bg-green-600 hover:bg-green-700 text-white shadow-md hover:shadow-lg"
                                 }`}
             >
-              {isLoading ? "Starting Interview..." : "Start Interview"}
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Starting...
+                </>
+              ) : (
+                "Start Interview"
+              )}
             </button>
           ) : (
             <button
               onClick={handleStopCall}
               disabled={isLoading}
-              className={`flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-200
+              className={`flex-1 flex items-center justify-center bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition duration-300 ease-in-out transform hover:-translate-y-0.5
                                 ${
                                   isLoading
                                     ? "bg-red-400 cursor-not-allowed"
                                     : "shadow-md hover:shadow-lg"
                                 }`}
             >
-              {isCallActive ? "End Interview" : "Interview Ended"}
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Ending...
+                </>
+              ) : (
+                "End Interview"
+              )}
             </button>
           )}
 
           {isCallActive && (
             <button
               onClick={handleToggleMute}
-              className={`flex-1 font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-200
+              className={`flex-1 font-bold py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-300 ease-in-out transform hover:-translate-y-0.5
                                 ${
                                   isMuted
-                                    ? "bg-orange-600 hover:bg-orange-700"
+                                    ? "bg-orange-500 hover:bg-orange-600"
                                     : "bg-indigo-600 hover:bg-indigo-700"
                                 } text-white shadow-md hover:shadow-lg`}
             >
@@ -399,7 +460,7 @@ export default function VapiInterviewBot() {
           <div className="flex justify-center mb-6">
             <button
               onClick={handleSendBackgroundMessage}
-              className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg text-sm focus:outline-none focus:shadow-outline transition duration-200 shadow-md hover:shadow-lg w-full"
+              className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition duration-300 ease-in-out transform hover:-translate-y-0.5 w-full shadow-md hover:shadow-lg"
             >
               Prompt Next Question
             </button>
@@ -408,12 +469,12 @@ export default function VapiInterviewBot() {
 
         {/* Automated Transcript Display */}
         {transcriptOutput && (
-          <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
+          <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50 shadow-inner">
             <h2 className="text-xl font-semibold mb-3 text-gray-800">
               Interview Transcript
             </h2>
-            <div className="mt-4 p-3 bg-white border border-gray-300 rounded-lg text-gray-700 text-sm max-h-40 overflow-y-auto whitespace-pre-wrap">
-              <h3 className="font-semibold mb-2">Transcript:</h3>
+            <div className="mt-4 p-3 bg-white border border-gray-300 rounded-lg text-gray-700 text-sm max-h-40 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+              <h3 className="font-semibold mb-2 text-gray-600">Full Transcript:</h3>
               {transcriptOutput}
             </div>
           </div>
@@ -421,34 +482,19 @@ export default function VapiInterviewBot() {
 
         {/* Automated Evaluation Display */}
         {evaluationResult && (
-          <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
+          <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50 shadow-inner">
             <h2 className="text-xl font-semibold mb-3 text-gray-800">
               Interview Evaluation
             </h2>
-            <div className="mt-4 p-3 bg-white border border-gray-300 rounded-lg text-gray-700 text-sm whitespace-pre-wrap">
-              <h3 className="font-semibold mb-2">Evaluation:</h3>
+            <div className="mt-4 p-3 bg-white border border-gray-300 rounded-lg text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">
+              <h3 className="font-semibold mb-2 text-gray-600">Evaluation Summary:</h3>
               {evaluationResult}
             </div>
           </div>
         )}
-
-        {/* Status Display */}
-        <div className="mb-6 text-center">
-          <p className="text-gray-800 text-lg font-medium">
-            Status: <span className="font-semibold text-blue-700">{status}</span>
-          </p>
-          {isCallActive && (
-            <p className="text-gray-600 text-sm mt-1">
-              Interviewer Volume: {volumeLevel.toFixed(2)}
-            </p>
-          )}
-          {errorMessage && (
-            <p className="text-red-600 text-sm mt-2 font-medium">{errorMessage}</p>
-          )}
-        </div>
       </div>
       {!publicKey && (
-        <p className="text-center text-red-600 mt-4 text-sm font-medium">
+        <p className="text-center text-red-600 mt-4 text-sm font-medium bg-red-50 p-3 rounded-lg border border-red-200 max-w-lg mx-auto shadow-sm">
           **Vapi Public Key is not set in environment variables. Please set `NEXT_PUBLIC_VAPI_PUBLIC_KEY`.**
         </p>
       )}
