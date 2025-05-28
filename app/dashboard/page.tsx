@@ -217,6 +217,21 @@ const DashboardPage = () => {
                 </div>
               </CardContent>
             </Card>
+            
+            <Card className="bg-white text-center">
+              <CardHeader>
+                <CardTitle className="text-xl">Practice Interviews</CardTitle>
+                <CardDescription>Improve your skills with general interview practice.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Link href="/interview-practice" passHref>
+                  <Button className="w-full sm:w-auto px-6 py-3 bg-[#4A3AFF] hover:bg-[#6357FF] text-white">
+                    Start Practice Interview
+                  </Button>
+                </Link>
+                <p className="text-gray-700 mt-4">Here you can track your progress, view past interviews, and more (Coming Soon).</p>
+              </CardContent>
+            </Card>
 
             <Card className="bg-white">
               <CardHeader>
@@ -295,20 +310,7 @@ const DashboardPage = () => {
               </CardContent>
             </Card>
 
-            <Card className="bg-white text-center">
-              <CardHeader>
-                <CardTitle className="text-xl">Practice Interviews</CardTitle>
-                <CardDescription>Improve your skills with general interview practice.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Link href="/interview-practice" passHref>
-                  <Button className="w-full sm:w-auto px-6 py-3 bg-[#4A3AFF] hover:bg-[#6357FF] text-white">
-                    Start Practice Interview
-                  </Button>
-                </Link>
-                <p className="text-gray-700 mt-4">Here you can track your progress, view past interviews, and more (Coming Soon).</p>
-              </CardContent>
-            </Card>
+            
 
           </div>
         </div>
