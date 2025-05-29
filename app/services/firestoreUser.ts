@@ -1,5 +1,5 @@
 // app/firebase/firestoreUser.ts
-import { setDoc, doc, getDoc } from "firebase/firestore";
+import { setDoc, doc, getDoc, updateDoc, arrayUnion } from "firebase/firestore";
 import { auth, db } from "@/app/firebase/firebaseConfig";
 
 // Creates user doc in Firestore if it doesn't already exist
@@ -20,10 +20,34 @@ export const ensureUserDocExists = async () => {
         state: "",
         city: "",
       },
-      resumeUrl: "", // Added the resumeUrl field, initialized as an empty string
-      // UPDATED: Initialize appliedJobs as an empty object for new users
-      // The single 'interviewStatus' field is now replaced by per-job statuses within 'appliedJobs'
+      resumeUrl: "",
       appliedJobs: {},
+      // Initialize a new field to store only Vapi call IDs as an array
+      vapiCallIds: [],
     });
   }
 };
+
+// Function to save ONLY the Vapi call ID to the user's document
+export const saveInterviewCallId = async (callId: string) => {
+  const user = auth.currentUser;
+  if (!user) {
+    console.error("No authenticated user to save interview data.");
+    return;
+  }
+
+  const userRef = doc(db, "users", user.uid);
+
+  try {
+    // Use updateDoc with arrayUnion to add the new callId to the array
+    await updateDoc(userRef, {
+      vapiCallIds: arrayUnion(callId),
+    });
+    console.log(`Interview call ID ${callId} saved successfully for user ${user.uid}`);
+  } catch (error) {
+    console.error("Error saving interview call ID:", error);
+  }
+};
+
+// Removed: InterviewRecord interface
+// Removed: updateInterviewRecord function

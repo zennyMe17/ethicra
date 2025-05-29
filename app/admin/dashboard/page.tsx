@@ -1,7 +1,7 @@
 // app/admin/dashboard/page.tsx
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react'; // Added useCallback
+import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/app/firebase/firebaseConfig';
@@ -30,7 +30,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-import { ShieldAlert, FileText, ExternalLink, PlusCircle } from 'lucide-react';
+import { ShieldAlert, FileText, PlusCircle, MessageSquareText, Loader2, Award } from 'lucide-react'; // Added Award icon
 
 // Define types for clarity
 interface JobPosting {
@@ -56,10 +56,15 @@ interface AppUser {
   email: string;
   name: string;
   resumeUrl?: string;
-  // This will now be a map where key is jobPostingId and value is status
   appliedJobs: {
     [jobPostingId: string]: Partial<AppliedJobDetails>; // Using Partial as discussed previously
   };
+  vapiCallIds?: string[]; // ADDED: Field to store Vapi call IDs for the user
+}
+
+// New interface for the evaluation result
+interface EvaluationResult {
+  evaluation: string; // The full evaluation string from OpenAI (e.g., "Evaluation: ...\nScore: .../10")
 }
 
 const AdminLandingPage = () => {
@@ -76,10 +81,17 @@ const AdminLandingPage = () => {
     jobTitle: '',
     description: '',
     requirements: '',
-    applicationDeadline: '', //YYYY-MM-DD
+    applicationDeadline: '', // YYYY-MM-DD
   });
   const [isPostingJob, setIsPostingJob] = useState(false);
   const [isNewJobDialogOpen, setIsNewJobDialogOpen] = useState(false);
+
+  // Evaluation states
+  const [selectedTranscript, setSelectedTranscript] = useState<string | null>(null);
+  const [evaluationResult, setEvaluationResult] = useState<EvaluationResult | null>(null);
+  const [isEvaluationDialogOpen, setIsEvaluationDialogOpen] = useState(false);
+  const [loadingEvaluation, setLoadingEvaluation] = useState(false);
+  const [evaluatingCallId, setEvaluatingCallId] = useState<string | null>(null); // To track which call is being evaluated
 
 
   // Auth state listener
@@ -112,7 +124,6 @@ const AdminLandingPage = () => {
     }
   }, [currentUser, loading]);
 
-  // --- Start of fix ---
   // Extract fetchData into a useCallback hook so it can be safely called from other functions
   const fetchData = useCallback(async () => {
     setLoadingData(true);
@@ -140,6 +151,7 @@ const AdminLandingPage = () => {
               name: userData.name || 'N/A',
               resumeUrl: userData.resumeUrl || undefined,
               appliedJobs: userData.appliedJobs, // Include all applied jobs for the user object
+              vapiCallIds: userData.vapiCallIds || [], // ADDED: Include Vapi call IDs
             });
           }
         });
@@ -163,16 +175,14 @@ const AdminLandingPage = () => {
     } finally {
       setLoadingData(false);
     }
-  }, []); // Empty dependency array means this function is created once
+  }, []);
 
   // Fetch all job postings and their applicants
   useEffect(() => {
     if (isAdmin) {
       fetchData();
     }
-  }, [isAdmin, fetchData]); // Add fetchData to dependency array
-
-  // --- End of fix ---
+  }, [isAdmin, fetchData]);
 
 
   // Function to handle selecting user for interview for a specific job
@@ -254,6 +264,56 @@ const AdminLandingPage = () => {
       setIsPostingJob(false);
     }
   };
+
+  // NEW FUNCTION: Fetch transcript and then evaluate it
+  const fetchAndEvaluateTranscript = async (callId: string) => {
+    setLoadingEvaluation(true);
+    setEvaluatingCallId(callId); // Set the callId being evaluated
+    setSelectedTranscript(null);
+    setEvaluationResult(null);
+    setIsEvaluationDialogOpen(true); // Open the dialog immediately to show loading
+
+    try {
+      // 1. Fetch the transcript using your /api/get-transcript route
+      const transcriptResponse = await fetch(`/api/get-transcript?callId=${callId}`);
+      if (!transcriptResponse.ok) {
+        const errorData = await transcriptResponse.json();
+        throw new Error(errorData.error || `Failed to fetch transcript: ${transcriptResponse.statusText}`);
+      }
+      const { transcript } = await transcriptResponse.json();
+      setSelectedTranscript(transcript);
+
+      if (!transcript || transcript === 'Transcript not found for this call ID.') {
+        setEvaluationResult({ evaluation: "No transcript available to evaluate." });
+        return; // Stop here if no transcript
+      }
+
+      // 2. Send the fetched transcript to your /api/evaluate-transcript route
+      const evaluationResponse = await fetch('/api/evaluate-transcript', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ transcript }),
+      });
+
+      if (!evaluationResponse.ok) {
+        const errorData = await evaluationResponse.json();
+        throw new Error(errorData.error || `Failed to evaluate transcript: ${evaluationResponse.statusText}`);
+      }
+
+      const evaluationData = await evaluationResponse.json();
+      setEvaluationResult(evaluationData); // This should contain { evaluation: "..." }
+
+    } catch (error) {
+      console.error("Error during transcript fetch or evaluation:", error);
+      setEvaluationResult({ evaluation: `Error: ${(error as Error).message}` });
+    } finally {
+      setLoadingEvaluation(false);
+      setEvaluatingCallId(null); // Clear the tracking ID
+    }
+  };
+
 
   if (loading) {
     return <div className="flex justify-center items-center h-screen"><p className="text-lg text-gray-700">Checking authentication...</p></div>;
@@ -408,6 +468,7 @@ const AdminLandingPage = () => {
                             <TableHead>Email</TableHead>
                             <TableHead>Resume</TableHead>
                             <TableHead>Status</TableHead>
+                            <TableHead>Vapi Call IDs</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -424,7 +485,7 @@ const AdminLandingPage = () => {
                                     rel="noopener noreferrer"
                                     className="inline-flex items-center text-blue-600 hover:underline"
                                   >
-                                    View <ExternalLink className="ml-1 h-4 w-4" />
+                                    View <FileText className="ml-1 h-4 w-4" />
                                   </a>
                                 ) : (
                                   <span className="text-gray-500 text-sm">Not uploaded</span>
@@ -432,6 +493,31 @@ const AdminLandingPage = () => {
                               </TableCell>
                               <TableCell>
                                 {getInterviewStatusBadge(applicant.appliedJobs[job.id]?.status || 'none')}
+                              </TableCell>
+                              <TableCell>
+                                {applicant.vapiCallIds && applicant.vapiCallIds.length > 0 ? (
+                                  <div className="flex flex-col gap-1 text-sm">
+                                    {applicant.vapiCallIds.map((callId, index) => (
+                                      <Button
+                                        key={index}
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => fetchAndEvaluateTranscript(callId)}
+                                        className="font-mono text-xs p-1 h-auto flex items-center justify-start"
+                                        disabled={loadingEvaluation && evaluatingCallId === callId}
+                                      >
+                                        {loadingEvaluation && evaluatingCallId === callId ? (
+                                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                        ) : (
+                                          <Award className="mr-1 h-3 w-3" /> 
+                                        )}
+                                        Evaluate Call: {callId.substring(0, 8)}...
+                                      </Button>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-500 text-sm">No Vapi Calls</span>
+                                )}
                               </TableCell>
                               <TableCell className="text-right">
                                 {applicant.appliedJobs[job.id]?.status === 'applied' && (
@@ -483,6 +569,45 @@ const AdminLandingPage = () => {
           </div>
         </main>
       </div>
+
+      {/* Vapi Call Evaluation Dialog */}
+      <Dialog open={isEvaluationDialogOpen} onOpenChange={setIsEvaluationDialogOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Call Evaluation</DialogTitle>
+            <DialogDescription>
+              Evaluation for Vapi Call ID: <span className="font-mono text-sm">{evaluatingCallId}</span>
+            </DialogDescription>
+          </DialogHeader>
+          {loadingEvaluation ? (
+            <div className="flex flex-col items-center justify-center p-4">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="mt-2 text-gray-600">Fetching transcript and evaluating...</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 py-4">
+              {selectedTranscript && (
+                <div className="grid gap-2">
+                  <h4 className="font-semibold">Transcript:</h4>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap max-h-40 overflow-y-auto border p-2 rounded">
+                    {selectedTranscript}
+                  </p>
+                </div>
+              )}
+              {evaluationResult ? (
+                <div className="grid gap-2">
+                  <h4 className="font-semibold">Evaluation Result:</h4>
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap bg-blue-50 p-3 rounded-md border border-blue-200">
+                    {evaluationResult.evaluation}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-center text-gray-600">No evaluation data available.</p>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Vapi from "@vapi-ai/web";
 import { CreateAssistantDTO } from "@vapi-ai/web/dist/api";
+import { saveInterviewCallId } from "@/app/services/firestoreUser";
 
 const publicKey = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY || "";
 
@@ -15,105 +16,16 @@ export default function VapiInterviewBot() {
   const [volumeLevel, setVolumeLevel] = useState<number>(0);
   const [isMuted, setIsMuted] = useState<boolean>(false);
 
-  const [transcriptOutput, setTranscriptOutput] = useState<string | null>(null);
-  const [evaluationResult, setEvaluationResult] = useState<string | null>(null);
+  // Removed transcriptOutput and evaluationResult states
 
   const vapiRef = useRef<Vapi | null>(null);
-  const isCallActiveRef = useRef<boolean>(isCallActive); // Keep this ref for cleanup logic
-  const currentCallIdRef = useRef<string | null>(null); // To store call ID for post-call actions
-  const transcriptTimerRef = useRef<NodeJS.Timeout | null>(null); // Ref for the timer
+  const isCallActiveRef = useRef<boolean>(isCallActive);
+  const currentCallIdRef = useRef<string | null>(null);
+  // Removed transcriptTimerRef as it's no longer needed for auto-fetching
 
-  // Function to fetch transcript
-  const fetchTranscript = useCallback(async (callId: string) => {
-    if (!callId) {
-      setTranscriptOutput("No Call ID available for transcript.");
-      return null;
-    }
+  // Removed fetchTranscript and evaluateTranscript functions entirely
 
-    setTranscriptOutput(null); // Clear previous transcript output
-    setEvaluationResult(null); // Clear previous evaluation output
-    setErrorMessage(null); // Clear any previous errors
-    setStatus("Fetching interview results..."); // Update status while fetching
-
-    try {
-      console.log(`[Auto-Fetch Transcript] Requesting transcript for Call ID: ${callId}`);
-      const response = await fetch(`/api/get-transcript?callId=${callId}`);
-      const data = await response.json();
-
-      if (response.ok) {
-        const fetchedTranscript =
-          data.transcript || "Transcript not found for this call ID.";
-        setTranscriptOutput(fetchedTranscript);
-        console.log("[Auto-Fetch Transcript] Transcript fetched successfully.");
-        return fetchedTranscript; // Return the transcript content for evaluation
-      } else {
-        setTranscriptOutput(`Error: ${data.error || "Failed to fetch transcript."}`);
-        setErrorMessage(data.error || "Failed to fetch transcript.");
-        console.error("[Auto-Fetch Transcript] Error response from API:", data.error);
-        return null;
-      }
-    } catch (error: any) {
-      setTranscriptOutput(
-        `Error fetching transcript: ${error.message || "Network error"}`
-      );
-      setErrorMessage(`Error fetching transcript: ${error.message || "Network error"}`);
-      console.error("[Auto-Fetch Transcript] Client-side fetch error:", error);
-      return null;
-    } finally {
-      // Revert status if there are no further actions (e.g., evaluation)
-      // This is handled by evaluation in this flow, so it's less critical here.
-    }
-  }, []);
-
-  // Function to evaluate transcript
-  const evaluateTranscript = useCallback(async (transcript: string) => {
-    if (
-      !transcript ||
-      transcript === "Transcript not found for this call ID." ||
-      transcript.startsWith("Error:")
-    ) {
-      setEvaluationResult("No valid transcript to evaluate.");
-      return;
-    }
-
-    setEvaluationResult(null); // Clear previous evaluation
-    setErrorMessage(null); // Clear any old errors
-    setStatus("Analyzing interview performance..."); // Update status during evaluation
-
-    try {
-      console.log("[Auto-Evaluate Transcript] Sending transcript to OpenAI for evaluation.");
-      const response = await fetch("/api/evaluate-transcript", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ transcript: transcript }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setEvaluationResult(data.evaluation);
-        console.log("[Auto-Evaluate Transcript] Evaluation received successfully.");
-      } else {
-        setEvaluationResult(`Error: ${data.error || "Failed to get evaluation."}`);
-        setErrorMessage(data.error || "Failed to get evaluation.");
-        console.error("[Auto-Evaluate Transcript] Error response from API:", data.error);
-      }
-    } catch (error: any) {
-      setEvaluationResult(
-        `Error evaluating transcript: ${error.message || "Network error"}`
-      );
-      setErrorMessage(
-        `Error evaluating transcript: ${error.message || "Network error"}`
-      );
-      console.error("[Auto-Evaluate Transcript] Client-side evaluation fetch error:", error);
-    } finally {
-      setStatus(`Interview Ended. Results ready.`); // Final status update
-    }
-  }, []);
-
-  // Call End Handler - now triggers auto-fetch and auto-evaluate with delay
+  // Call End Handler - now only saves the call ID
   const handleCallEnd = useCallback(async () => {
     console.log("[VAPI Event] handleCallEnd triggered.");
     setIsCallActive(false);
@@ -124,24 +36,9 @@ export default function VapiInterviewBot() {
     console.log(`[DEBUG] currentCallIdRef.current at handleCallEnd: ${callIdAtEnd}`);
 
     if (callIdAtEnd) {
-      setStatus(`Interview Ended. Call ID: ${callIdAtEnd}. Processing results...`);
-      console.log(`SUCCESS: Call ended. The Call ID was: ${callIdAtEnd}`);
-
-      // Clear any existing timer to prevent multiple triggers
-      if (transcriptTimerRef.current) {
-        clearTimeout(transcriptTimerRef.current);
-      }
-
-      // Start a timer to fetch transcript and evaluate after 5 seconds
-      transcriptTimerRef.current = setTimeout(async () => {
-        console.log("[DELAYED ACTION] Initiating transcript fetch after 5 seconds.");
-        const fetchedTranscript = await fetchTranscript(callIdAtEnd);
-        if (fetchedTranscript) {
-          await evaluateTranscript(fetchedTranscript);
-        } else {
-          setStatus(`Interview Ended. Failed to fetch transcript.`);
-        }
-      }, 5000); // 5-second delay
+      await saveInterviewCallId(callIdAtEnd); // Save the call ID to Firestore
+      setStatus(`Interview Ended. Call ID: ${callIdAtEnd}.`);
+      console.log(`SUCCESS: Call ended. The Call ID was: ${callIdAtEnd}. Call ID saved to Firestore.`);
     } else {
       console.error("ERROR: Call ended, but currentCallIdRef.current was NULL.");
       setStatus("Interview Ended (Call ID not found)");
@@ -149,10 +46,10 @@ export default function VapiInterviewBot() {
 
     currentCallIdRef.current = null;
     console.log("[DEBUG] currentCallIdRef.current reset after call end processing.");
-  }, [fetchTranscript, evaluateTranscript]); // Dependencies: publicKey and handleCallEnd (which is useCallback memoized)
+  }, []); // Dependencies list is empty as no other functions are called here
 
   useEffect(() => {
-    isCallActiveRef.current = isCallActive; // Keep ref updated for cleanup logic
+    isCallActiveRef.current = isCallActive;
   }, [isCallActive]);
 
   useEffect(() => {
@@ -166,17 +63,14 @@ export default function VapiInterviewBot() {
       vapiRef.current = new Vapi(publicKey);
       console.log("[Vapi Init] Vapi instance created.");
     }
-    const vapi = vapiRef.current; // Get the Vapi instance from the ref
+    const vapi = vapiRef.current;
 
-    // handleCallStart now takes NO arguments to match type definition
     const handleCallStart = () => {
       console.log("[VAPI Event] Call-start event received from Vapi SDK.");
       setIsCallActive(true);
       setIsLoading(false);
       setErrorMessage(null);
       setStatus("Interview Started");
-      // The call ID is now primarily captured when vapi.start() resolves,
-      // as per the updated handleStartCall.
     };
 
     const handleSpeechStart = () => setStatus("Interviewer Speaking");
@@ -191,11 +85,10 @@ export default function VapiInterviewBot() {
       setErrorMessage(`Vapi Error: ${e.message || JSON.stringify(e)}`);
       setStatus("Error During Interview");
       console.error("[VAPI Event] Error:", e);
-      currentCallIdRef.current = null; // Clear call ID on error
+      currentCallIdRef.current = null;
       console.log("[DEBUG] currentCallIdRef.current cleared due to error.");
     };
 
-    // Register event listeners
     vapi.on("call-start", handleCallStart);
     vapi.on("call-end", handleCallEnd);
     vapi.on("speech-start", handleSpeechStart);
@@ -203,11 +96,9 @@ export default function VapiInterviewBot() {
     vapi.on("volume-level", handleVolumeLevel);
     vapi.on("error", handleError);
 
-    // Cleanup function for useEffect
     return () => {
       console.log("[useEffect] Cleaning up Vapi listeners.");
       if (vapiRef.current) {
-        // Deregister event listeners
         vapi.off("call-start", handleCallStart);
         vapi.off("call-end", handleCallEnd);
         vapi.off("speech-start", handleSpeechStart);
@@ -215,13 +106,8 @@ export default function VapiInterviewBot() {
         vapi.off("volume-level", handleVolumeLevel);
         vapi.off("error", handleError);
 
-        // Clear any pending transcript timer on unmount
-        if (transcriptTimerRef.current) {
-          clearTimeout(transcriptTimerRef.current);
-          transcriptTimerRef.current = null;
-        }
+        // Removed clearTimeout for transcriptTimerRef
 
-        // Stop the call only if it's still active when component unmounts
         if (isCallActiveRef.current) {
           console.log("[Cleanup] Stopping active Vapi call during component unmount.");
           vapiRef.current.stop();
@@ -232,7 +118,6 @@ export default function VapiInterviewBot() {
     };
   }, [publicKey, handleCallEnd]);
 
-  // Default Assistant Configuration (used without Assistant ID input)
   const interviewAssistantConfig: CreateAssistantDTO = {
     model: {
       provider: "openai",
@@ -263,18 +148,13 @@ export default function VapiInterviewBot() {
 
     setIsLoading(true);
     setErrorMessage(null);
-    setTranscriptOutput(null); // Clear previous transcript output
-    setEvaluationResult(null); // Clear previous evaluation output
+    // Removed setTranscriptOutput(null) and setEvaluationResult(null)
     setStatus("Initiating Interview...");
 
-    currentCallIdRef.current = null; // Ensure fresh call ID for a new call attempt
-    if (transcriptTimerRef.current) { // Clear any previous timers before starting new call
-      clearTimeout(transcriptTimerRef.current);
-      transcriptTimerRef.current = null;
-    }
+    currentCallIdRef.current = null;
+    // Removed clearTimeout for transcriptTimerRef
 
     try {
-      // Request microphone permission upfront for a smoother start
       try {
         await navigator.mediaDevices.getUserMedia({ audio: true });
         console.log("[Permissions] Microphone permission granted.");
@@ -283,15 +163,15 @@ export default function VapiInterviewBot() {
         setErrorMessage(`Microphone access needed: ${micError.message || "Permission denied."}`);
         setIsLoading(false);
         setStatus("Permission Denied");
-        return; // Stop if permission is denied
+        return;
       }
 
-      // Capture call ID when vapi.start() resolves
       const call = await vapiRef.current.start(interviewAssistantConfig);
 
       if (call && call.id) {
         console.log(`[DEBUG] Call started successfully, ID from start(): ${call.id}`);
-        currentCallIdRef.current = call.id; // This is where we ensure the call ID is stored!
+        currentCallIdRef.current = call.id;
+        setIsCallActive(true);
         setStatus("Interview Started");
       } else {
         console.error("[Start Call] Vapi start returned null or missing call ID.");
@@ -307,7 +187,6 @@ export default function VapiInterviewBot() {
         `Failed to start interview: ${error.message || "An unknown error occurred."}`
       );
       currentCallIdRef.current = null;
-      console.log("[DEBUG] currentCallIdRef.current cleared due to start error.");
     }
   };
 
@@ -347,7 +226,6 @@ export default function VapiInterviewBot() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[400px]">
       <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-xl w-full max-w-lg mx-auto relative border border-gray-100">
-        {/* Icon (moved to top for better visual hierarchy) */}
         <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 z-10 bg-gradient-to-br from-purple-500 to-indigo-700 p-3 rounded-full shadow-lg border-4 border-white">
           <svg
             className="w-10 h-10 text-white"
@@ -374,7 +252,6 @@ export default function VapiInterviewBot() {
           </p>
         </div>
 
-        {/* Status Display */}
         <div className="mb-6 text-center">
           <p className="text-gray-700 text-base font-semibold">
             Status: <span className="font-bold text-blue-600">{status}</span>
@@ -391,7 +268,6 @@ export default function VapiInterviewBot() {
           )}
         </div>
 
-        {/* Buttons for Call Control */}
         <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 mb-6">
           {!isCallActive ? (
             <button
@@ -467,31 +343,9 @@ export default function VapiInterviewBot() {
           </div>
         )}
 
-        {/* Automated Transcript Display */}
-        {transcriptOutput && (
-          <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50 shadow-inner">
-            <h2 className="text-xl font-semibold mb-3 text-gray-800">
-              Interview Transcript
-            </h2>
-            <div className="mt-4 p-3 bg-white border border-gray-300 rounded-lg text-gray-700 text-sm max-h-40 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-              <h3 className="font-semibold mb-2 text-gray-600">Full Transcript:</h3>
-              {transcriptOutput}
-            </div>
-          </div>
-        )}
+        {/* Removed the transcriptOutput display section */}
+        {/* Removed the evaluationResult display section */}
 
-        {/* Automated Evaluation Display */}
-        {evaluationResult && (
-          <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50 shadow-inner">
-            <h2 className="text-xl font-semibold mb-3 text-gray-800">
-              Interview Evaluation
-            </h2>
-            <div className="mt-4 p-3 bg-white border border-gray-300 rounded-lg text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">
-              <h3 className="font-semibold mb-2 text-gray-600">Evaluation Summary:</h3>
-              {evaluationResult}
-            </div>
-          </div>
-        )}
       </div>
       {!publicKey && (
         <p className="text-center text-red-600 mt-4 text-sm font-medium bg-red-50 p-3 rounded-lg border border-red-200 max-w-lg mx-auto shadow-sm">
