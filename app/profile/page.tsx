@@ -13,6 +13,9 @@ import { useRouter } from "next/navigation";
 // Added AWS S3 Imports
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
+// Import the resume scanner utility
+import { getResumeTextFromFirestore } from '@/app/utils/resumeScanner'; // <--- NEW
+
 // Country code data (ISO 3166-1 alpha-2) - Add your actual country data here
 const countryCodes = [
   { name: 'United States', dialCode: '+1', code: 'US', flag: '🇺🇸' },
@@ -31,8 +34,8 @@ interface UserData {
     state: string;
     city: string;
   };
-  // Un-commented and added field for resume URL
-  resumeUrl?: string; // Now correctly typed
+  resumeUrl?: string;
+  resumeText?: string; // <--- NEW: Added field for resume text
 }
 
 // --- IMPORTANT SECURITY WARNING ---
@@ -65,7 +68,8 @@ export default function ProfilePage() {
       state: "",
       city: "",
     },
-    resumeUrl: "", // Initialize if adding a field for the URL
+    resumeUrl: "",
+    resumeText: "", // <--- NEW: Initialize resumeText
   });
   const [loading, setLoading] = useState<boolean>(true);
   const [isEditing, setIsEditing] = useState<boolean>(false);
@@ -111,7 +115,7 @@ export default function ProfilePage() {
     const fetchData = async () => {
       if (!currentUser || !isUser) {
         if (!loading) { // Only redirect if not loading (prevents redirect loop on initial load)
-           router.push("/unauthorized"); // Redirect if not a regular user and not loading
+            router.push("/unauthorized"); // Redirect if not a regular user and not loading
         }
         return;
       }
@@ -131,26 +135,24 @@ export default function ProfilePage() {
               state: data.location?.state || "",
               city: data.location?.city || "",
             },
-            resumeUrl: data.resumeUrl || "", // Load the URL if it exists
+            resumeUrl: data.resumeUrl || "",
+            resumeText: data.resumeText || "", // <--- NEW: Load resumeText
           });
         } else {
           console.log("No such user document!");
-          // Handle the case where the user is logged in but has no 'users' document
-          // Maybe redirect to a setup page or show an error.
-          router.push("/unauthorized"); // Redirect as they should have a user profile
+          router.push("/unauthorized");
         }
       } catch (error) {
         console.error("Error fetching user data:", error);
         alert("Failed to load profile data. Please try again.");
-          if (!currentUser) { // Check again in case state changed during async operation
-            router.push("/login"); // Redirect to login if fetching fails and user is somehow null
+          if (!currentUser) {
+            router.push("/login");
           } else {
-            router.push("/unauthorized"); // Otherwise, unauthorized or error page
+            router.push("/unauthorized");
           }
       }
     };
 
-    // Trigger fetch only when loading is false AND user is authenticated and confirmed as 'isUser'
     if (!loading && currentUser && isUser) {
       fetchData();
     }
@@ -162,7 +164,7 @@ export default function ProfilePage() {
     const userRef = doc(db, "users", currentUser.uid);
     try {
       // Prepare data to save to Firestore
-      const updatePayload: Partial<UserData> = { // Use Partial to allow updating only some fields
+      const updatePayload: Partial<UserData> = {
         name: userData.name,
         phoneNumber: userData.phoneNumber,
         countryCode: userData.countryCode,
@@ -171,45 +173,34 @@ export default function ProfilePage() {
           state: userData.location.state,
           city: userData.location.city,
         },
-        // If a new file was uploaded, its URL is already saved in handleFileUpload.
-        // We don't need to explicitly save it here unless you want to update it
-        // when other profile data is saved, which is redundant if handleFileUpload
-        // updates it immediately.
-        // We ensure `resumeUrl` is passed through if it was loaded or updated
-        resumeUrl: uploadedFileUrl || userData.resumeUrl, // Prioritize newly uploaded URL
+        resumeUrl: uploadedFileUrl || userData.resumeUrl,
+        resumeText: userData.resumeText, // <--- NEW: Ensure resumeText is passed through
       };
 
-       // Only update email in Firestore if it's different and save attempt is made
        if (userData.email !== (currentUser.email || "")) {
            updatePayload.email = userData.email;
        }
 
-      await updateDoc(userRef, updatePayload); // Use the prepared payload
+      await updateDoc(userRef, updatePayload);
 
-      // Update email in Firebase Auth if it was changed
       if (currentUser.email !== userData.email) {
-            // Check if email is not empty before updating Firebase Auth email
             if (userData.email.trim() !== "") {
                 await updateEmail(currentUser, userData.email);
             } else {
-                // Handle case where user tried to set email to empty string in UI (Auth requires email)
                 alert("Email cannot be empty. Please provide a valid email address.");
-                // Optionally, revert the email state back to currentUser.email
                 setUserData(prev => ({ ...prev, email: currentUser.email || "" }));
-                return; // Stop the update process here
+                return;
             }
        }
 
       alert("✅ Profile updated successfully!");
-      setIsEditing(false); // Disable editing after successful update
-      setUploadedFileUrl(null); // Clear temporary uploaded file URL after saving
-      setFile(null); // Clear selected file
-    } catch (error: any) { // Catch error as 'any' or more specific type
+      setIsEditing(false);
+      setUploadedFileUrl(null);
+      setFile(null);
+    } catch (error: any) {
       console.error("Error updating profile:", error);
-      // Provide more specific feedback for Auth errors vs Firestore errors if possible
       if (error.code === 'auth/requires-recent-login') {
             alert("Your last login was too long ago. Please re-authenticate by logging out and logging back in to change your email.");
-            // Optionally redirect to re-authentication flow
            } else if (error.code === 'auth/invalid-email') {
                 alert("The email address is invalid.");
            }
@@ -221,7 +212,6 @@ export default function ProfilePage() {
 
   const handleEdit = () => {
     setIsEditing(true);
-    // Reset file upload state when entering edit mode to ensure a clean slate for new uploads
     setFile(null);
     setUploadError(null);
     setUploadedFileUrl(null);
@@ -234,15 +224,15 @@ export default function ProfilePage() {
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       setFile(event.target.files[0]);
-      setUploadError(null); // Clear previous errors
-      setUploadedFileUrl(null); // Clear previous link if a new file is selected
+      setUploadError(null);
+      setUploadedFileUrl(null);
     } else {
       setFile(null);
     }
   };
 
   const handleFileUpload = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); // Prevent default form submission
+    event.preventDefault();
 
     if (!file) {
       setUploadError('Please select a file to upload.');
@@ -251,7 +241,7 @@ export default function ProfilePage() {
 
     setUploading(true);
     setUploadError(null);
-    setUploadedFileUrl(null); // Clear previous URL when starting a new upload
+    setUploadedFileUrl(null);
 
     const reader = new FileReader();
 
@@ -266,40 +256,49 @@ export default function ProfilePage() {
       const fileContent = reader.result as ArrayBuffer;
       const uint8Array = new Uint8Array(fileContent);
 
-      // Generate a unique key (path/filename) for the S3 object
-      const userId = currentUser?.uid; // Get current user ID
-      // Use a more specific path like resumes/userId/filename
+      const userId = currentUser?.uid;
       const fileKey = userId ? `user-uploads/${userId}/resumes/${Date.now()}-${file.name}` : `resumes/${Date.now()}-${file.name}`;
 
 
       const params = {
         Bucket: bucketName,
-        Key: fileKey, // The name of the object in the bucket
+        Key: fileKey,
         Body: uint8Array,
         ContentType: file.type,
-        // ACL: 'public-read', // Optional: uncomment if using ACLs for public read
-        // otherwise, use Bucket Policy for public read
       };
 
       try {
         const command = new PutObjectCommand(params);
         await s3Client.send(command);
 
-        // Construct the public URL for the uploaded object
         const publicUrl = `https://${bucketName}.s3.${process.env.NEXT_PUBLIC_AWS_REGION}.amazonaws.com/${encodeURIComponent(fileKey)}`;
 
-        setUploadedFileUrl(publicUrl); // Set the URL of the *just uploaded* file
+        setUploadedFileUrl(publicUrl);
         console.log('File uploaded successfully:', publicUrl);
 
         // Save the uploaded file URL to the user's profile in Firestore immediately
         if (currentUser) {
           const userRef = doc(db, "users", currentUser.uid);
           await updateDoc(userRef, {
-            resumeUrl: publicUrl, // Assuming you have a field for the resume URL
+            resumeUrl: publicUrl,
           });
           console.log("Resume URL saved to profile.");
-          // Update local state so the new URL is reflected without re-fetching
-          setUserData(prev => ({ ...prev, resumeUrl: publicUrl }));
+          setUserData(prev => ({ ...prev, resumeUrl: publicUrl })); // Update local state for resumeUrl
+
+          // <--- NEW: Trigger OCR and save extracted text to Firestore
+          // This call needs to happen *after* the resumeUrl is updated in Firestore,
+          // as getResumeTextFromFirestore likely fetches the URL from Firestore.
+          const extractedText = await getResumeTextFromFirestore();
+          if (extractedText) {
+            await updateDoc(userRef, {
+              resumeText: extractedText, // Save the extracted text
+            });
+            setUserData(prev => ({ ...prev, resumeText: extractedText })); // Update local state for resumeText
+            console.log("Extracted resume text saved to profile.");
+          } else {
+            console.warn("Could not extract text from resume after upload.");
+          }
+          // --- END NEW ---
         }
 
       } catch (err: any) {
@@ -307,11 +306,9 @@ export default function ProfilePage() {
         setUploadError(`Upload failed: ${err.message || err}`);
       } finally {
         setUploading(false);
-        // Reset the file input element so the same file can be selected again if needed
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
-        // Keep the selected file state to display the name
       }
     };
 
@@ -324,29 +321,28 @@ export default function ProfilePage() {
         }
     };
 
-    reader.readAsArrayBuffer(file); // Start reading
+    reader.readAsArrayBuffer(file);
   };
 
     const handleRemoveFile = async () => {
-        // This is for removing the *currently selected* file in the input, not the one from the database
         setFile(null);
         setUploadError(null);
-        setUploadedFileUrl(null); // Clear temporary uploaded URL
+        setUploadedFileUrl(null);
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
 
-        // Option to remove the resume URL from Firestore if the user wants to clear it entirely
-        if (currentUser && userData.resumeUrl) {
+        if (currentUser && (userData.resumeUrl || userData.resumeText)) { // Check both fields
             const userRef = doc(db, "users", currentUser.uid);
             try {
                 await updateDoc(userRef, {
-                    resumeUrl: "", // Set resumeUrl to an empty string to remove it
+                    resumeUrl: "", // Clear resumeUrl
+                    resumeText: "", // <--- NEW: Clear resumeText as well
                 });
-                setUserData(prev => ({ ...prev, resumeUrl: "" })); // Update local state
+                setUserData(prev => ({ ...prev, resumeUrl: "", resumeText: "" })); // Update local state
                 alert("Resume removed from profile successfully.");
             } catch (error) {
-                console.error("Error removing resume URL from Firestore:", error);
+                console.error("Error removing resume data from Firestore:", error);
                 alert("Failed to remove resume from profile. Please try again.");
             }
         }
@@ -354,19 +350,18 @@ export default function ProfilePage() {
   // --- End File Upload Handlers ---
 
 
-  // Redirect logic based on loading, currentUser, and isUser state
     if (loading) {
       return <div className="flex justify-center items-center h-screen"><p className="text-lg text-gray-700">Checking authentication and user status...</p></div>;
     }
 
     if (!currentUser) {
       router.push("/login");
-      return null; // Prevent rendering anything else until redirect
+      return null;
     }
 
     if (!isUser) {
       router.push("/unauthorized");
-      return null; // Prevent rendering
+      return null;
     }
 
 
@@ -419,26 +414,26 @@ export default function ProfilePage() {
             <div>
               <Label htmlFor="phone" className="block text-sm font-medium text-gray-700">Phone Number</Label>
               <div className="mt-1 flex rounded-md shadow-sm">
-                 {/* Country Code Select */}
+                {/* Country Code Select */}
                 <Select
                   value={userData.countryCode}
                   onValueChange={(value) => setUserData({ ...userData, countryCode: value })}
                   disabled={!isEditing}
                 >
-                   {/* Adjusted Trigger styling slightly to align */}
+                  {/* Adjusted Trigger styling slightly to align */}
                   <SelectTrigger className={`flex items-center justify-between rounded-l-md border border-r-0 border-gray-300 bg-gray-50 px-2 sm:px-3 py-2 text-gray-500 text-sm h-[38px] ${!isEditing ? 'cursor-not-allowed' : ''}`}>
                     <SelectValue placeholder="Code" />
                   </SelectTrigger>
-                   {/* Adjusted Content styling */}
+                  {/* Adjusted Content styling */}
                   <SelectContent className="max-h-40 overflow-y-auto text-sm">
                     {countryCodes.map((country) => (
                       <SelectItem key={country.code} value={country.dialCode}>
-                         {country.flag} {country.dialCode} - {country.name}
+                          {country.flag} {country.dialCode} - {country.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                   {/* Phone Input */}
+                    {/* Phone Input */}
                 <Input
                   id="phone"
                   type="tel"
@@ -454,7 +449,7 @@ export default function ProfilePage() {
             <div>
               <Label className="block text-sm font-medium text-gray-700">Location</Label>
               <div className="mt-1 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                 {/* Country */}
+                  {/* Country */}
                 <div>
                   <Label htmlFor="country" className="block text-xs font-medium text-gray-700">Country</Label>
                   <Input
@@ -471,7 +466,7 @@ export default function ProfilePage() {
                     disabled={!isEditing}
                   />
                 </div>
-                 {/* State/Province */}
+                  {/* State/Province */}
                 <div>
                   <Label htmlFor="state" className="block text-xs font-medium text-gray-700">State/Province</Label>
                   <Input
@@ -488,7 +483,7 @@ export default function ProfilePage() {
                     disabled={!isEditing}
                   />
                 </div>
-                 {/* City */}
+                  {/* City */}
                 <div>
                   <Label htmlFor="city" className="block text-xs font-medium text-gray-700">City</Label>
                   <Input
@@ -528,6 +523,17 @@ export default function ProfilePage() {
                         ) : (
                             <p className="text-sm text-gray-500">No resume uploaded.</p>
                         )}
+                        {/* The following block was removed to prevent displaying extracted resume text */}
+                        {/*
+                        {userData.resumeText && (
+                            <div className="mt-4">
+                                <Label className="block text-sm font-medium text-gray-700 mb-2">Extracted Resume Text (first 200 chars):</Label>
+                                <p className="text-sm text-gray-600 border p-2 rounded max-h-32 overflow-y-auto bg-gray-50">
+                                    {userData.resumeText.substring(0, 200)}...
+                                </p>
+                            </div>
+                        )}
+                        */}
                     </div>
                 ) : (
                     // Show upload options when editing
@@ -537,14 +543,14 @@ export default function ProfilePage() {
                             <div className="mb-4">
                                 <Label className="block text-sm font-medium text-gray-700 mb-1">Current Resume (in database):</Label>
                                 <a
-                                    href={uploadedFileUrl || userData.resumeUrl || "#"} // Prioritize newly uploaded
+                                    href={uploadedFileUrl || userData.resumeUrl || "#"}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-blue-600 hover:underline break-all block text-sm"
                                 >
                                     {uploadedFileUrl ? "View Newly Uploaded Resume" : "View Existing Resume"}
                                 </a>
-                                {userData.resumeUrl && ( // Show remove option only if there's an existing resume
+                                {userData.resumeUrl && (
                                     <Button
                                         type="button"
                                         onClick={handleRemoveFile}
@@ -588,7 +594,7 @@ export default function ProfilePage() {
                                             <Button
                                                 type="button"
                                                 onClick={() => {
-                                                    setFile(null); // Clear selected file in input
+                                                    setFile(null);
                                                     setUploadError(null);
                                                     setUploadedFileUrl(null);
                                                     if (fileInputRef.current) {
@@ -642,31 +648,28 @@ export default function ProfilePage() {
 
             {/* Save/Cancel Buttons for Profile Edit */}
             {isEditing && (
-                 <div className="mt-6 flex justify-end gap-2">
-                 <Button
-                   onClick={() => {
-                       setIsEditing(false);
-                       // Reset file upload state when cancelling edit
-                       setFile(null);
-                       setUploadError(null);
-                       setUploadedFileUrl(null);
-                       if (fileInputRef.current) {
-                           fileInputRef.current.value = '';
-                       }
-                       // Re-fetch data to revert any unsaved changes if needed (optional)
-                       // Or, simply reset userData to the state before editing, if you saved a copy
-                   }}
-                   className="border border-gray-300 bg-white text-gray-700 py-2 px-4 rounded h-[36px] sm:h-[40px] text-sm flex items-center justify-center hover:bg-gray-100 hover:cursor-pointer transition-colors duration-200"
-                 >
-                   Cancel
-                 </Button>
-                 <Button
-                   onClick={handleUpdate}
-                   className="border bg-white border-[#4A3AFF] text-[#4A3AFF] py-2 px-4 rounded h-[36px] sm:h-[40px] text-sm flex items-center justify-center hover:bg-[#F0EDFF] hover:cursor-pointer hover:text-[#6357FF] transition-colors duration-200"
-                 >
-                   Save Changes
-                 </Button>
-               </div>
+                       <div className="mt-6 flex justify-end gap-2">
+                       <Button
+                           onClick={() => {
+                               setIsEditing(false);
+                               setFile(null);
+                               setUploadError(null);
+                               setUploadedFileUrl(null);
+                               if (fileInputRef.current) {
+                                   fileInputRef.current.value = '';
+                               }
+                           }}
+                           className="border border-gray-300 bg-white text-gray-700 py-2 px-4 rounded h-[36px] sm:h-[40px] text-sm flex items-center justify-center hover:bg-gray-100 hover:cursor-pointer transition-colors duration-200"
+                       >
+                           Cancel
+                       </Button>
+                       <Button
+                           onClick={handleUpdate}
+                           className="border bg-white border-[#4A3AFF] text-[#4A3AFF] py-2 px-4 rounded h-[36px] sm:h-[40px] text-sm flex items-center justify-center hover:bg-[#F0EDFF] hover:cursor-pointer hover:text-[#6357FF] transition-colors duration-200"
+                       >
+                           Save Changes
+                       </Button>
+                   </div>
             )}
 
           </div> {/* End of Combined space-y */}

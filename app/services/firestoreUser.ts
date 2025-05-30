@@ -21,6 +21,7 @@ export const ensureUserDocExists = async () => {
         city: "",
       },
       resumeUrl: "",
+      resumeText: "", // Added: Initialize resumeText field
       appliedJobs: {},
       // Initialize a new field to store only Vapi call IDs as an array
       vapiCallIds: [],
@@ -48,6 +49,3 @@ export const saveInterviewCallId = async (callId: string) => {
     console.error("Error saving interview call ID:", error);
   }
 };
-
-// Removed: InterviewRecord interface
-// Removed: updateInterviewRecord function
