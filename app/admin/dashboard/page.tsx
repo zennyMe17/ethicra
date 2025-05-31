@@ -82,7 +82,7 @@ const AdminLandingPage = () => {
     jobTitle: '',
     description: '',
     requirements: '',
-    applicationDeadline: '', // YYYY-MM-DD
+    applicationDeadline: '', //YYYY-MM-DD
   });
   const [isPostingJob, setIsPostingJob] = useState(false);
   const [isNewJobDialogOpen, setIsNewJobDialogOpen] = useState(false);
@@ -623,7 +623,7 @@ const AdminLandingPage = () => {
                                     <AlertDialogHeader>
                                       <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
                                       <AlertDialogDescription>
-                                        Are you sure you want to delete the application of {applicant.name || applicant.email} for the job "{job.jobTitle}"? This action cannot be undone.
+                                        Are you sure you want to delete the application of {applicant.name || applicant.email} for the job &quot;{job.jobTitle}&quot;? This action cannot be undone.
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
