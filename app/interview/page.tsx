@@ -1,4 +1,4 @@
-
+"use client";
 import InterviewLoading from '@/components/InterviewLoading'
 import { useState, useEffect, useRef, useCallback } from "react";
 import Vapi from "@vapi-ai/web";
