@@ -1,6 +1,8 @@
 // app/components/VapiInterviewBot.tsx
 "use client";
-
+import React, { Suspense } from 'react'
+//import VapiInterviewBot from '@/components/VapiInterviewBot'; // Adjust path if necessary
+import InterviewLoading from '@/components/InterviewLoading'
 import { useState, useEffect, useRef, useCallback } from "react";
 import Vapi from "@vapi-ai/web";
 import { CreateAssistantDTO } from "@vapi-ai/web/dist/api";
@@ -378,6 +380,7 @@ export default function VapiInterviewBot() {
   };
 
   return (
+    <Suspense fallback={<InterviewLoading />}>
     <div className="flex flex-col md:flex-row items-center justify-center min-h-screen p-6 space-y-6 md:space-y-0 md:space-x-4" style={{ backgroundColor: '#FAFAFC' }}>
       <div className="flex flex-col items-center justify-between p-6 md:p-8 min-h-[450px] w-full max-w-md rounded-2xl">
         <div className="flex flex-col items-center">
@@ -479,5 +482,6 @@ export default function VapiInterviewBot() {
         </p>
       )}
     </div>
+    </Suspense>
   );
 }
