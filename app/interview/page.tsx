@@ -7,11 +7,10 @@ import { CreateAssistantDTO } from "@vapi-ai/web/dist/api";
 import { saveInterviewCallId } from "@/app/services/firestoreUser";
 import { auth, db } from "@/app/firebase/firebaseConfig";
 import { doc, getDoc } from "firebase/firestore";
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation'; // Keep this import
 
 import { FiPhoneCall, FiPhoneOff, FiMic, FiMicOff, FiCheckCircle, FiAlertCircle, FiInfo, FiCamera, FiVolumeX, FiVolume2 } from "react-icons/fi";
 
-// Ensure publicKey is accessed safely
 const publicKey = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY || "";
 
 export default function VapiInterviewBot() {
@@ -30,8 +29,31 @@ export default function VapiInterviewBot() {
   const currentCallIdRef = useRef<string | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
 
-  const searchParams = useSearchParams();
-  const jobId = searchParams.get('jobId');
+  // Initialize searchParams and jobId inside a useEffect or conditionally
+  // to ensure they are only accessed on the client-side.
+  // We'll use state to store jobId once it's available.
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+
+  const searchParams = useSearchParams(); // This hook can be called at the top level
+                                         // but its *return value* should be used client-side.
+
+
+  // ---
+  // You already have 'use client' at the top, which is good.
+  // Now, manage the jobId state within a useEffect.
+  // ---
+
+  useEffect(() => {
+    // This code will only run on the client-side after hydration
+    const jobIdFromParams = searchParams.get('jobId');
+    if (jobIdFromParams) {
+      setCurrentJobId(jobIdFromParams);
+      console.log(`[DEBUG] Client-side jobId obtained: ${jobIdFromParams}`);
+    } else {
+      console.warn("[DEBUG] No jobId found in URL search parameters.");
+    }
+  }, [searchParams]); // Re-run if searchParams object changes (unlikely for route params, but good practice)
+
 
   const handleCallEnd = useCallback(async () => {
     setIsCallActive(false);
@@ -40,20 +62,20 @@ export default function VapiInterviewBot() {
     setIsBotSpeaking(false);
     setStatusMessage("Interview ended.");
 
-    // Safely stop media tracks only if window is defined (client-side)
-    if (typeof window !== 'undefined' && localVideoRef.current && localVideoRef.current.srcObject) {
+    if (localVideoRef.current && localVideoRef.current.srcObject) {
       (localVideoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
       localVideoRef.current.srcObject = null;
     }
 
     const callIdAtEnd = currentCallIdRef.current;
     console.log(`[DEBUG] currentCallIdRef.current (value for saving): ${callIdAtEnd}`);
-    console.log(`[DEBUG] Job ID for this interview: ${jobId}`);
+    // Use currentJobId state here
+    console.log(`[DEBUG] Job ID for this interview: ${currentJobId}`);
 
-    if (callIdAtEnd && jobId) {
+    if (callIdAtEnd && currentJobId) { // Use currentJobId here
       try {
-        await saveInterviewCallId(callIdAtEnd, jobId);
-        console.log(`SUCCESS: Call ended. Call ID saved to Firestore for job ${jobId}.`);
+        await saveInterviewCallId(callIdAtEnd, currentJobId); // Use currentJobId here
+        console.log(`SUCCESS: Call ended. Call ID saved to Firestore for job ${currentJobId}.`);
         setHasInterviewBeenTaken(true);
       } catch (error) {
         console.error("ERROR: Failed to save call ID to Firestore:", error);
@@ -65,19 +87,13 @@ export default function VapiInterviewBot() {
       console.error("ERROR: Call ended, but currentCallIdRef.current was NULL or Job ID was missing. No call ID to save.");
       currentCallIdRef.current = null;
     }
-  }, [jobId]);
+  }, [currentJobId]); // Add currentJobId to dependency array
 
   useEffect(() => {
     isCallActiveRef.current = isCallActive;
   }, [isCallActive]);
 
   useEffect(() => {
-    // Only initialize Vapi SDK and set up listeners on the client-side
-    if (typeof window === 'undefined') {
-      console.log("[useEffect] Running on server, skipping Vapi initialization.");
-      return;
-    }
-
     console.log("[useEffect] Vapi initialization and listener setup initiated.");
     if (!publicKey) {
       setErrorMessage("Vapi Public Key not set in environment variables. Please set NEXT_PUBLIC_VAPI_PUBLIC_KEY.");
@@ -149,10 +165,9 @@ export default function VapiInterviewBot() {
    * Effect to fetch resume content and check interview status from Firestore.
    */
   useEffect(() => {
-    // This part runs on both server and client. auth.currentUser will be null on server.
-    // Ensure Firestore access only happens client-side or when auth.currentUser is truly available.
-    if (typeof window === 'undefined') {
-      console.log("[useEffect] Running on server, skipping Firestore data fetch.");
+    // Only run this effect if currentJobId is available (meaning it's client-side)
+    if (!currentJobId) {
+      setIsScanningResume(false); // Stop scanning if jobId isn't ready yet
       return;
     }
 
@@ -160,13 +175,6 @@ export default function VapiInterviewBot() {
       if (!auth.currentUser) {
         setErrorMessage("Please log in to fetch your data.");
         setStatusMessage("Please log in.");
-        setIsScanningResume(false);
-        return;
-      }
-
-      if (!jobId) {
-        setErrorMessage("Job ID is missing. Cannot fetch interview status.");
-        setStatusMessage("Job ID missing.");
         setIsScanningResume(false);
         return;
       }
@@ -188,15 +196,15 @@ export default function VapiInterviewBot() {
           }
 
           // Check if interview has already been taken for this jobId
-          if (userData.appliedJobs && userData.appliedJobs[jobId] && userData.appliedJobs[jobId].interviewTaken) {
+          if (userData.appliedJobs && userData.appliedJobs[currentJobId] && userData.appliedJobs[currentJobId].interviewTaken) {
             setHasInterviewBeenTaken(true);
             setErrorMessage("You have already taken an interview for this job.");
             setStatusMessage("Interview already completed.");
-            console.log(`Interview already taken for job ID: ${jobId}`);
+            console.log(`Interview already taken for job ID: ${currentJobId}`);
           } else {
             setHasInterviewBeenTaken(false);
             setStatusMessage("Ready to start interview.");
-            console.log(`Interview not yet taken for job ID: ${jobId}`);
+            console.log(`Interview not yet taken for job ID: ${currentJobId}`);
           }
 
         } else {
@@ -205,7 +213,7 @@ export default function VapiInterviewBot() {
         }
       } catch (error) {
         console.error("Error fetching user data for interview check:", error);
-        setErrorMessage(`Error loading data: ${(error as Error).message}.`);
+        setErrorMessage(`Error loading data: ${error}.`);
         setStatusMessage(`Error loading data.`);
       } finally {
         setIsScanningResume(false); // Data loading complete
@@ -213,7 +221,7 @@ export default function VapiInterviewBot() {
     };
 
     fetchData();
-  }, [jobId]);
+  }, [currentJobId]); // Dependency array: Re-run if currentJobId changes
 
   useEffect(() => {
     if (isCallActive) {
@@ -271,13 +279,6 @@ export default function VapiInterviewBot() {
   );
 
   const handleStartCall = async () => {
-    // Defensive checks for client-side execution
-    if (typeof window === 'undefined') {
-      setErrorMessage("Cannot start call on the server.");
-      setStatusMessage("Client-side operation only.");
-      return;
-    }
-
     if (!vapiRef.current) {
       setErrorMessage("Vapi not initialized. Please refresh.");
       setStatusMessage("Vapi not initialized.");
@@ -290,22 +291,24 @@ export default function VapiInterviewBot() {
       return;
     }
 
-    if (!jobId) {
-      setErrorMessage("Job ID is missing. Cannot start interview without a job context.");
-      setStatusMessage("Job ID required.");
-      return;
+    // Use currentJobId here
+    if (!currentJobId) {
+        setErrorMessage("Job ID is missing. Cannot start interview without a job context.");
+        setStatusMessage("Job ID required.");
+        return;
     }
 
+    // NEW CHECK: Prevent starting if interview has already been taken
     if (hasInterviewBeenTaken) {
-      setErrorMessage("You have already taken an interview for this job.");
-      setStatusMessage("Interview already completed.");
-      return;
+        setErrorMessage("You have already taken an interview for this job.");
+        setStatusMessage("Interview already completed.");
+        return;
     }
 
     if (!resumeContent && !window.confirm("No resume found. Do you want to proceed with a general interview for this job?")) {
-      setErrorMessage("Interview cancelled. Upload a resume for personalized questions.");
-      setStatusMessage("Interview cancelled.");
-      return;
+        setErrorMessage("Interview cancelled. Upload a resume for personalized questions.");
+        setStatusMessage("Interview cancelled.");
+        return;
     }
 
     setIsLoading(true);
@@ -314,7 +317,6 @@ export default function VapiInterviewBot() {
     console.log("[DEBUG] handleStartCall initiated. currentCallIdRef.current (before Vapi.start()):", currentCallIdRef.current);
 
     try {
-      // Access navigator.mediaDevices only on the client-side
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
@@ -336,10 +338,9 @@ export default function VapiInterviewBot() {
         setErrorMessage("Failed to start call. Call ID missing.");
         setStatusMessage("Failed to start call.");
         setIsLoading(false);
-        // Safely stop media tracks only if window is defined (client-side)
-        if (typeof window !== 'undefined' && localVideoRef.current && localVideoRef.current.srcObject) {
-          (localVideoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
-          localVideoRef.current.srcObject = null;
+        if (localVideoRef.current && localVideoRef.current.srcObject) {
+            (localVideoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
+            localVideoRef.current.srcObject = null;
         }
         currentCallIdRef.current = null;
       }
@@ -356,8 +357,8 @@ export default function VapiInterviewBot() {
 
   const handleStopCall = () => {
     if (!vapiRef.current) {
-      console.warn("[Stop Call] Vapi instance not available to stop.");
-      return;
+        console.warn("[Stop Call] Vapi instance not available to stop.");
+        return;
     }
     setIsLoading(true);
     setStatusMessage("Ending call...");
@@ -367,8 +368,8 @@ export default function VapiInterviewBot() {
 
   const handleToggleMute = () => {
     if (!vapiRef.current) {
-      console.warn("[Toggle Mute] Vapi instance not available.");
-      return;
+        console.warn("[Toggle Mute] Vapi instance not available.");
+        return;
     }
     const currentlyMuted = vapiRef.current.isMuted();
     vapiRef.current.setMuted(!currentlyMuted);
@@ -380,10 +381,10 @@ export default function VapiInterviewBot() {
     <div className="flex flex-col md:flex-row items-center justify-center min-h-screen p-6 space-y-6 md:space-y-0 md:space-x-4" style={{ backgroundColor: '#FAFAFC' }}>
       <div className="flex flex-col items-center justify-between p-6 md:p-8 min-h-[450px] w-full max-w-md rounded-2xl">
         <div className="flex flex-col items-center">
-          <div className={`w-60 h-60 rounded-full overflow-hidden border-4 border-blue-500 shadow-md flex items-center justify-center mb-4 bg-white transform transition-all duration-500
+            <div className={`w-60 h-60 rounded-full overflow-hidden border-4 border-blue-500 shadow-md flex items-center justify-center mb-4 bg-white transform transition-all duration-500
                                 ${isBotSpeaking ? 'ring-4 ring-blue-400 ring-opacity-75 animate-pulse-light scale-[1.03] shadow-blue-500/60' : 'hover:scale-[1.01]'}`}>
-            <img src="/images/bot.jpg" alt="AI Bot" className="object-cover w-full h-full" />
-          </div>
+                <img src="/images/bot.jpg" alt="AI Bot" className="object-cover w-full h-full" />
+            </div>
         </div>
 
         <div className="mt-auto w-full flex flex-col items-center space-y-3">
@@ -394,11 +395,11 @@ export default function VapiInterviewBot() {
               'text-green-700 bg-green-100 border-green-200'
             }`}>
             {errorMessage ? <FiAlertCircle className="w-4 h-4 mr-2" /> :
-              isScanningResume ? <FiInfo className="w-4 h-4 mr-2" /> :
-              isMuted && isCallActive ? <FiVolumeX className="w-4 h-4 mr-2" /> :
-              isBotSpeaking && isCallActive ? <FiVolume2 className="w-4 h-4 mr-2" /> :
-              isCallActive ? <FiCheckCircle className="w-4 h-4 mr-2" /> :
-              <FiInfo className="w-4 h-4 mr-2" />}
+             isScanningResume ? <FiInfo className="w-4 h-4 mr-2" /> :
+             isMuted && isCallActive ? <FiVolumeX className="w-4 h-4 mr-2" /> :
+             isBotSpeaking && isCallActive ? <FiVolume2 className="w-4 h-4 mr-2" /> :
+             isCallActive ? <FiCheckCircle className="w-4 h-4 mr-2" /> :
+             <FiInfo className="w-4 h-4 mr-2" />}
             {statusMessage}
           </p>
         </div>
@@ -406,10 +407,7 @@ export default function VapiInterviewBot() {
 
       <div className="flex flex-col items-center justify-between p-6 md:p-8 min-h-[450px] w-full max-w-md rounded-2xl">
         <div className="w-full max-w-4xl aspect-[16/12] bg-gray-100 rounded-lg overflow-hidden relative border border-gray-300 shadow-sm flex items-center justify-center">
-          {/* Render video element only if window is defined (client-side) */}
-          {typeof window !== 'undefined' && (
-            <video ref={localVideoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover rounded-lg"></video>
-          )}
+          <video ref={localVideoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover rounded-lg"></video>
           {!isCallActive && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 bg-opacity-70 text-gray-300 text-base">
               <FiCamera className="w-16 h-16 mb-2 opacity-70" />
@@ -422,10 +420,10 @@ export default function VapiInterviewBot() {
           {!isCallActive ? (
             <button
               onClick={handleStartCall}
-              disabled={isLoading || isScanningResume || !publicKey || !jobId || hasInterviewBeenTaken}
+              disabled={isLoading || isScanningResume || !publicKey || !currentJobId || hasInterviewBeenTaken} // Use currentJobId here
               className={`flex items-center justify-center w-16 h-16 rounded-full text-white text-xl transition duration-300 ease-in-out transform hover:scale-105 shadow-lg
                 ${
-                  isLoading || isScanningResume || !publicKey || !jobId || hasInterviewBeenTaken
+                  isLoading || isScanningResume || !publicKey || !currentJobId || hasInterviewBeenTaken // Updated disabled condition
                     ? "bg-gray-400 cursor-not-allowed"
                     : "bg-green-600 hover:bg-green-700 active:scale-95"
                 }`}
