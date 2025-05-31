@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/app/firebase/firebaseConfig';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, collection, getDocs, updateDoc, addDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, updateDoc, addDoc, deleteDoc } from 'firebase/firestore'; // Added deleteDoc
 
 // Import Shadcn UI components and utils
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-import { ShieldAlert, FileText, PlusCircle, MessageSquareText, Loader2, Award } from 'lucide-react'; // Added Award icon
+import { ShieldAlert, FileText, PlusCircle, MessageSquareText, Loader2, Award, Trash2 } from 'lucide-react'; // Added Trash2 icon
 
 // Define types for clarity
 interface JobPosting {
@@ -49,6 +49,8 @@ interface JobPosting {
 interface AppliedJobDetails {
   status: 'none' | 'applied' | 'selected_for_resume_interview' | 'interview_scheduled' | 'interview_completed' | 'rejected_after_interview';
   appliedAt: string;
+  vapiCallIds?: string[]; // Field to store Vapi call IDs for this specific job application
+  interviewTaken?: boolean; // Added for user dashboard, good to have consistency
 }
 
 interface AppUser {
@@ -59,7 +61,6 @@ interface AppUser {
   appliedJobs: {
     [jobPostingId: string]: Partial<AppliedJobDetails>; // Using Partial as discussed previously
   };
-  vapiCallIds?: string[]; // ADDED: Field to store Vapi call IDs for the user
 }
 
 // New interface for the evaluation result
@@ -131,10 +132,24 @@ const AdminLandingPage = () => {
       const jobPostingsCollectionRef = collection(db, "jobPostings");
       const jobPostingsSnapshot = await getDocs(jobPostingsCollectionRef);
       const fetchedJobPostings: JobPosting[] = [];
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Normalize to start of day for comparison
 
       for (const docSnap of jobPostingsSnapshot.docs) {
         const jobData = docSnap.data();
         const jobPostingId = docSnap.id;
+        const deadline = new Date(jobData.applicationDeadline);
+        deadline.setHours(23, 59, 59, 999); // Normalize to end of day for comparison
+
+        let currentIsActive = jobData.isActive;
+
+        // NEW: Check if deadline has passed and update isActive if needed
+        if (currentIsActive && deadline < today) {
+          console.log(`Job ${jobPostingId} deadline passed. Setting isActive to false.`);
+          const jobRef = doc(db, "jobPostings", jobPostingId);
+          await updateDoc(jobRef, { isActive: false });
+          currentIsActive = false; // Update in memory for current render
+        }
 
         // Fetch users who applied for this job
         const usersCollectionRef = collection(db, "users");
@@ -142,7 +157,7 @@ const AdminLandingPage = () => {
         const applicants: AppUser[] = [];
 
         usersSnapshot.docs.forEach(userDoc => {
-          const userData = userDoc.data() as AppUser;
+          const userData = userDoc.data();
           // Check if user has applied for this specific job
           if (userData.appliedJobs && userData.appliedJobs[jobPostingId]) {
             applicants.push({
@@ -151,7 +166,6 @@ const AdminLandingPage = () => {
               name: userData.name || 'N/A',
               resumeUrl: userData.resumeUrl || undefined,
               appliedJobs: userData.appliedJobs, // Include all applied jobs for the user object
-              vapiCallIds: userData.vapiCallIds || [], // ADDED: Include Vapi call IDs
             });
           }
         });
@@ -165,7 +179,7 @@ const AdminLandingPage = () => {
           applicationDeadline: jobData.applicationDeadline,
           postedBy: jobData.postedBy,
           postedAt: jobData.postedAt,
-          isActive: jobData.isActive,
+          isActive: currentIsActive, // Use the potentially updated isActive status
           applicants: applicants, // Attach the fetched applicants
         });
       }
@@ -229,37 +243,77 @@ const AdminLandingPage = () => {
             return job;
           })
         );
-        alert(`User ${userUid} selected for resume interview for job ${jobPostingId}!`);
+        console.log(`User ${userUid} selected for resume interview for job ${jobPostingId}!`);
       }
     } catch (error) {
       console.error("Error selecting user for interview:", error);
-      alert("Failed to select user for interview. Please try again.");
+      console.error("Failed to select user for interview. Please try again.");
     }
   };
+
+  // NEW FUNCTION: Handle deleting a job application
+  const handleDeleteApplication = async (userUid: string, jobPostingId: string) => {
+    try {
+      const userRef = doc(db, "users", userUid);
+      const userSnap = await getDoc(userRef);
+
+      if (userSnap.exists()) {
+        const userData = userSnap.data() as AppUser;
+        const updatedAppliedJobs = { ...userData.appliedJobs };
+        delete updatedAppliedJobs[jobPostingId]; // Remove the specific job application
+
+        await updateDoc(userRef, {
+          appliedJobs: updatedAppliedJobs,
+        });
+
+        // Optimistically update local state
+        setJobPostings(prevJobPostings =>
+          prevJobPostings.map(job => {
+            if (job.id === jobPostingId) {
+              return {
+                ...job,
+                applicants: job.applicants.filter(applicant => applicant.uid !== userUid)
+              };
+            }
+            return job;
+          })
+        );
+        console.log(`Application for user ${userUid} on job ${jobPostingId} deleted successfully.`);
+        alert("Application deleted successfully!");
+      }
+    } catch (error) {
+      console.error("Error deleting application:", error);
+      alert("Failed to delete application. Please try again.");
+    }
+  };
+
 
   // Function to handle posting a new job
   const handlePostNewJob = async () => {
     if (!currentUser || !currentUser.uid) {
-      alert("Admin not logged in.");
+      console.error("Admin not logged in.");
       return;
     }
     setIsPostingJob(true);
     try {
-      await addDoc(collection(db, "jobPostings"), {
+      const docRef = await addDoc(collection(db, "jobPostings"), {
         ...newJob,
         applicationDeadline: new Date(newJob.applicationDeadline).toISOString().split('T')[0], // Ensure YYYY-MM-DD
         postedBy: currentUser.uid,
         postedAt: new Date().toISOString(),
         isActive: true, // New jobs are active by default
       });
-      alert("Job posted successfully!");
+      const jobPostingId = docRef.id;
+
+      console.log(`Job posted successfully! Job ID: ${jobPostingId}`);
+      alert(`Job posted successfully! Job ID: ${jobPostingId}`); // Temporarily using alert for demonstration
+
       setNewJob({ companyName: '', jobTitle: '', description: '', requirements: '', applicationDeadline: '' });
       setIsNewJobDialogOpen(false); // Close the dialog
-      // Re-fetch data to show the new job posting
       await fetchData(); // Call fetchData again after posting
     } catch (error) {
       console.error("Error posting job:", error);
-      alert("Failed to post job. Please try again.");
+      console.error("Failed to post job. Please try again.");
     } finally {
       setIsPostingJob(false);
     }
@@ -377,7 +431,7 @@ const AdminLandingPage = () => {
                 <div className="grid gap-4 py-4">
                   <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="companyName" className="text-right">
-                      Company Name
+                      Company
                     </Label>
                     <Input
                       id="companyName"
@@ -449,11 +503,12 @@ const AdminLandingPage = () => {
               <p className="text-gray-600 text-center">No job postings found.</p>
             ) : (
               jobPostings.map(job => (
-                <Card key={job.id} className="mb-8">
+                <Card key={job.id} className={`mb-8 ${!job.isActive ? 'border-l-4 border-red-500' : 'border-l-4 border-indigo-500'}`}> {/* Visual cue for inactive */}
                   <CardHeader>
                     <CardTitle className="text-xl">{job.companyName} - {job.jobTitle}</CardTitle>
                     <CardDescription>
                       Deadline: {new Date(job.applicationDeadline).toLocaleDateString()} | Active: {job.isActive ? 'Yes' : 'No'}
+                      {!job.isActive && <span className="text-red-600 font-semibold ml-2">(Closed)</span>} {/* Added closed label */}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -468,7 +523,7 @@ const AdminLandingPage = () => {
                             <TableHead>Email</TableHead>
                             <TableHead>Resume</TableHead>
                             <TableHead>Status</TableHead>
-                            <TableHead>Vapi Call IDs</TableHead>
+                            <TableHead>Vapi Call IDs (Job Specific)</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -495,9 +550,9 @@ const AdminLandingPage = () => {
                                 {getInterviewStatusBadge(applicant.appliedJobs[job.id]?.status || 'none')}
                               </TableCell>
                               <TableCell>
-                                {applicant.vapiCallIds && applicant.vapiCallIds.length > 0 ? (
+                                {applicant.appliedJobs[job.id]?.vapiCallIds && applicant.appliedJobs[job.id].vapiCallIds!.length > 0 ? (
                                   <div className="flex flex-col gap-1 text-sm">
-                                    {applicant.vapiCallIds.map((callId, index) => (
+                                    {applicant.appliedJobs[job.id].vapiCallIds!.map((callId, index) => (
                                       <Button
                                         key={index}
                                         variant="outline"
@@ -509,17 +564,17 @@ const AdminLandingPage = () => {
                                         {loadingEvaluation && evaluatingCallId === callId ? (
                                           <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                                         ) : (
-                                          <Award className="mr-1 h-3 w-3" /> 
+                                          <Award className="mr-1 h-3 w-3" />
                                         )}
                                         Evaluate Call: {callId.substring(0, 8)}...
                                       </Button>
                                     ))}
                                   </div>
                                 ) : (
-                                  <span className="text-gray-500 text-sm">No Vapi Calls</span>
+                                  <span className="text-gray-500 text-sm">No Job-Specific Vapi Calls</span>
                                 )}
                               </TableCell>
-                              <TableCell className="text-right">
+                              <TableCell className="text-right space-x-2">
                                 {applicant.appliedJobs[job.id]?.status === 'applied' && (
                                   <AlertDialog>
                                     <AlertDialogTrigger asChild>
@@ -556,6 +611,29 @@ const AdminLandingPage = () => {
                                       Review Complete
                                     </Button>
                                   )}
+
+                                {/* NEW: Delete Application Button */}
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="destructive" size="sm" className="ml-2">
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to delete the application of {applicant.name || applicant.email} for the job "{job.jobTitle}"? This action cannot be undone.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleDeleteApplication(applicant.uid, job.id)}>
+                                        Delete Application
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
                               </TableCell>
                             </TableRow>
                           ))}

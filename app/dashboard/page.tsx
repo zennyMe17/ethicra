@@ -14,22 +14,19 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 // Redefine UserData to match the new Firestore structure for appliedJobs
-// CORRECTED: Make the appliedJobs entry type potentially Partial,
-// or ensure the `status` type includes 'none' as a default if a job ID exists but no full status.
 interface AppliedJobDetails {
   status: 'none' | 'applied' | 'selected_for_resume_interview' | 'interview_scheduled' | 'interview_completed' | 'rejected_after_interview';
   appliedAt: string; // ISO string or Firebase Timestamp
+  vapiCallIds?: string[]; // Array to store Vapi call IDs for this specific job application
+  interviewTaken?: boolean; // NEW: Flag to indicate if an interview has been taken for this job
 }
 
 interface UserData {
   name: string;
   resumeUrl?: string;
   // appliedJobs is now a map from jobPostingId to its status and appliedAt
-  // Allowing Partial<AppliedJobDetails> ensures that if a document in Firestore
-  // is missing one of these fields (e.g., only 'status' but not 'appliedAt'),
-  // it still matches the type.
   appliedJobs: {
-    [jobPostingId: string]: Partial<AppliedJobDetails>; // <--- CHANGE IS HERE
+    [jobPostingId: string]: Partial<AppliedJobDetails>;
   };
 }
 
@@ -42,7 +39,7 @@ interface JobPosting {
   applicationDeadline: string;
   postedBy: string;
   postedAt: string;
-  isActive: boolean;
+  isActive: boolean; // Crucial: This field must be present
 }
 
 const DashboardPage = () => {
@@ -50,9 +47,8 @@ const DashboardPage = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userName, setUserName] = useState<string>("User");
   const [userResumeUrl, setUserResumeUrl] = useState<string | null>(null);
-  // Using a map to store status for each applied job
-  // Ensure the useState type also reflects the Partial possibility
-  const [appliedJobsStatus, setAppliedJobsStatus] = useState<{ [jobPostingId: string]: Partial<AppliedJobDetails> }>({}); // <--- Match useState type
+  // Using a map to store status for each applied job, now including vapiCallIds
+  const [appliedJobsStatus, setAppliedJobsStatus] = useState<{ [jobPostingId: string]: Partial<AppliedJobDetails> }>({});
 
   const [availableJobPostings, setAvailableJobPostings] = useState<JobPosting[]>([]);
   const router = useRouter();
@@ -69,21 +65,18 @@ const DashboardPage = () => {
             const data = userSnap.data() as UserData;
             setUserName(data.name || "User");
             setUserResumeUrl(data.resumeUrl || null);
-            // Line 128: Initialize with fetched applied jobs
-            // This line is now compatible because `data.appliedJobs` can now have Partial<AppliedJobDetails>
+            // Initialize with fetched applied jobs, which now includes vapiCallIds and interviewTaken
             setAppliedJobsStatus(data.appliedJobs || {});
           } else {
             console.log("No user document found for this user.");
-            // Potentially create a basic user doc here if it doesn't exist
-            // await setDoc(userRef, { name: user.displayName || user.email, email: user.email, appliedJobs: {} }, { merge: true });
           }
 
-          // Fetch all active job postings
+          // Fetch all job postings (active and inactive)
           const jobPostingsCollectionRef = collection(db, "jobPostings");
           const querySnapshot = await getDocs(jobPostingsCollectionRef);
           const jobsList: JobPosting[] = querySnapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() as Omit<JobPosting, 'id'> }))
-            .filter(job => job.isActive); // Only show active jobs
+            .map(doc => ({ id: doc.id, ...doc.data() as Omit<JobPosting, 'id'> }));
+          // Removed .filter(job => job.isActive);
 
           setAvailableJobPostings(jobsList);
 
@@ -122,14 +115,26 @@ const DashboardPage = () => {
       return;
     }
 
+    // NEW: Check if the job is active before applying
+    const jobToApply = availableJobPostings.find(job => job.id === jobId);
+    if (!jobToApply || !jobToApply.isActive) {
+      toast.error("This job is no longer active and cannot be applied for.");
+      return;
+    }
+
     try {
       const userRef = doc(db, "users", currentUser.uid);
       // Ensure we are always writing a full object with both status and appliedAt
-      const newAppliedJobsStatus: { [jobId: string]: AppliedJobDetails } = { // <--- Cast to the full type here
-        ...appliedJobsStatus as { [jobId: string]: AppliedJobDetails }, // Cast appliedJobsStatus to the full type
+      // and initialize vapiCallIds and interviewTaken as an empty array/false if it doesn't exist for this job
+      const currentJobDetails = appliedJobsStatus[jobId] || {};
+      const newAppliedJobsStatus: { [jobId: string]: AppliedJobDetails } = {
+        ...appliedJobsStatus as { [jobId: string]: AppliedJobDetails },
         [jobId]: {
+          ...currentJobDetails, // Preserve existing details like vapiCallIds, interviewTaken if any
           status: 'applied',
           appliedAt: new Date().toISOString(),
+          vapiCallIds: currentJobDetails.vapiCallIds || [], // Ensure vapiCallIds array exists
+          interviewTaken: currentJobDetails.interviewTaken || false, // NEW: Ensure interviewTaken is initialized
         },
       };
 
@@ -145,13 +150,16 @@ const DashboardPage = () => {
     }
   };
 
-  const getInterviewStatusBadge = (status: AppliedJobDetails['status']) => { // <--- Changed type here
+  const getInterviewStatusBadge = (status: AppliedJobDetails['status'], interviewTaken: boolean | undefined) => {
+    if (interviewTaken) {
+      return <Badge className="bg-purple-500 text-white">Interview Completed</Badge>; // More specific badge for completed
+    }
     switch (status) {
       case 'selected_for_resume_interview':
         return <Badge className="bg-green-500 text-white">Selected for Interview</Badge>;
       case 'interview_scheduled':
         return <Badge variant="secondary">Interview Scheduled</Badge>;
-      case 'interview_completed':
+      case 'interview_completed': // This case will now be less frequent if interviewTaken is prioritized
         return <Badge variant="secondary">Interview Completed</Badge>;
       case 'rejected_after_interview':
         return <Badge variant="destructive">Rejected</Badge>;
@@ -217,7 +225,7 @@ const DashboardPage = () => {
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card className="bg-white text-center">
               <CardHeader>
                 <CardTitle className="text-xl">Practice Interviews</CardTitle>
@@ -245,16 +253,33 @@ const DashboardPage = () => {
                   <div className="grid gap-4">
                     {availableJobPostings.map(job => {
                       const hasApplied = !!appliedJobsStatus[job.id];
-                      // Accessing status needs to be careful with Partial type
-                      const currentStatus = appliedJobsStatus[job.id]?.status || 'none';
-                      const canStartResumeInterview = userResumeUrl && currentStatus === 'selected_for_resume_interview';
+                      const currentJobDetails = appliedJobsStatus[job.id] || {};
+                      const currentStatus = currentJobDetails.status || 'none';
+                      const interviewTaken = currentJobDetails.interviewTaken || false; // NEW: Get interviewTaken flag
+
+                      // Only allow starting a resume interview if:
+                      // 1. A resume is uploaded.
+                      // 2. The job status is 'selected_for_resume_interview'.
+                      // 3. An interview has NOT already been taken for this job.
+                      const canStartResumeInterview = userResumeUrl && currentStatus === 'selected_for_resume_interview' && !interviewTaken;
 
                       return (
-                        <Card key={job.id} className="border-l-4 border-indigo-500">
+                        <Card
+                          key={job.id}
+                          className={`border-l-4 ${job.isActive ? 'border-indigo-500' : 'opacity-70 border-dashed border-red-400'}`}
+                        >
                           <CardHeader>
                             <div className="flex justify-between items-center">
                               <CardTitle className="text-lg">{job.jobTitle} at {job.companyName}</CardTitle>
-                              {getInterviewStatusBadge(currentStatus)}
+                              <div className="flex items-center space-x-2">
+                                {/* NEW: Active/Closed Badge */}
+                                {job.isActive ? (
+                                  <Badge className="bg-green-500 hover:bg-green-600">Active</Badge>
+                                ) : (
+                                  <Badge className="bg-red-500 hover:bg-red-600">Closed</Badge>
+                                )}
+                                {getInterviewStatusBadge(currentStatus, interviewTaken)} {/* MODIFIED: Pass interviewTaken */}
+                              </div>
                             </div>
                             <CardDescription>Application Deadline: {new Date(job.applicationDeadline).toLocaleDateString()}</CardDescription>
                           </CardHeader>
@@ -265,7 +290,11 @@ const DashboardPage = () => {
                             <p className="text-sm text-gray-600 line-clamp-3">{job.requirements}</p>
 
                             <div className="flex flex-wrap gap-2 pt-4 justify-end">
-                              {!hasApplied ? (
+                              {!job.isActive ? ( // NEW: If job is not active, show 'Application Closed' button
+                                <Button variant="outline" disabled className="bg-gray-200 text-gray-500 cursor-not-allowed">
+                                  Application Closed
+                                </Button>
+                              ) : !hasApplied ? (
                                 <Button
                                   onClick={() => handleApplyForJob(job.id)}
                                   disabled={!userResumeUrl} // Disable if no resume
@@ -275,10 +304,10 @@ const DashboardPage = () => {
                                 </Button>
                               ) : (
                                 <>
-                                  <Button variant="outline" disabled>
+                                  <Button variant="outline" disabled={true}> {/* Always disable 'Applied' button */}
                                     Applied
                                   </Button>
-                                  {canStartResumeInterview && (
+                                  {canStartResumeInterview && ( // Only show the button if an interview can be started
                                     <Link
                                       href={`/interview?type=resume-based&jobId=${job.id}&resumeUrl=${encodeURIComponent(userResumeUrl || '')}`}
                                       passHref
@@ -288,16 +317,26 @@ const DashboardPage = () => {
                                       </Button>
                                     </Link>
                                   )}
+                                  {interviewTaken && ( // NEW: Show a message if interview has been taken
+                                    <Button variant="outline" disabled>
+                                      Interview Completed
+                                    </Button>
+                                  )}
                                 </>
                               )}
-                              {!userResumeUrl && !hasApplied && (
-                                <p className="text-xs text-red-500 mt-2 text-right">
+                              {!userResumeUrl && !hasApplied && job.isActive && ( // Only show this message if job is active and no resume
+                                <p className="text-xs text-red-500 mt-2 text-right w-full">
                                   You need to upload your resume to apply for jobs.
                                 </p>
                               )}
-                              {hasApplied && currentStatus === 'applied' && (
-                                <p className="text-xs text-indigo-600 mt-2 text-right">
+                              {hasApplied && currentStatus === 'applied' && !interviewTaken && job.isActive && (
+                                <p className="text-xs text-indigo-600 mt-2 text-right w-full">
                                   Waiting for administrator review.
+                                </p>
+                              )}
+                              {hasApplied && interviewTaken && ( // NEW: Message if interview already taken
+                                <p className="text-xs text-purple-600 mt-2 text-right w-full">
+                                  You have already completed the interview for this job.
                                 </p>
                               )}
                             </div>
@@ -309,9 +348,6 @@ const DashboardPage = () => {
                 )}
               </CardContent>
             </Card>
-
-            
-
           </div>
         </div>
       </div>
