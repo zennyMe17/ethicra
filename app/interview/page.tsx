@@ -11,6 +11,7 @@ import { useSearchParams } from 'next/navigation';
 
 import { FiPhoneCall, FiPhoneOff, FiMic, FiMicOff, FiCheckCircle, FiAlertCircle, FiInfo, FiCamera, FiVolumeX, FiVolume2 } from "react-icons/fi";
 
+// Ensure publicKey is accessed safely
 const publicKey = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY || "";
 
 export default function VapiInterviewBot() {
@@ -22,7 +23,7 @@ export default function VapiInterviewBot() {
   const [isScanningResume, setIsScanningResume] = useState<boolean>(true);
   const [isBotSpeaking, setIsBotSpeaking] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>("");
-  const [hasInterviewBeenTaken, setHasInterviewBeenTaken] = useState<boolean>(false); // NEW STATE
+  const [hasInterviewBeenTaken, setHasInterviewBeenTaken] = useState<boolean>(false);
 
   const vapiRef = useRef<Vapi | null>(null);
   const isCallActiveRef = useRef<boolean>(isCallActive);
@@ -33,14 +34,14 @@ export default function VapiInterviewBot() {
   const jobId = searchParams.get('jobId');
 
   const handleCallEnd = useCallback(async () => {
-    // ... (rest of handleCallEnd, already updated in previous response)
     setIsCallActive(false);
     setIsLoading(false);
     setErrorMessage(null);
     setIsBotSpeaking(false);
     setStatusMessage("Interview ended.");
 
-    if (localVideoRef.current && localVideoRef.current.srcObject) {
+    // Safely stop media tracks only if window is defined (client-side)
+    if (typeof window !== 'undefined' && localVideoRef.current && localVideoRef.current.srcObject) {
       (localVideoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
       localVideoRef.current.srcObject = null;
     }
@@ -53,7 +54,7 @@ export default function VapiInterviewBot() {
       try {
         await saveInterviewCallId(callIdAtEnd, jobId);
         console.log(`SUCCESS: Call ended. Call ID saved to Firestore for job ${jobId}.`);
-        setHasInterviewBeenTaken(true); // NEW: Update state after successful save
+        setHasInterviewBeenTaken(true);
       } catch (error) {
         console.error("ERROR: Failed to save call ID to Firestore:", error);
         setErrorMessage("Failed to save interview data.");
@@ -66,13 +67,17 @@ export default function VapiInterviewBot() {
     }
   }, [jobId]);
 
-
   useEffect(() => {
     isCallActiveRef.current = isCallActive;
   }, [isCallActive]);
 
   useEffect(() => {
-    // ... (Vapi SDK initialization and event listener setup - no changes needed here)
+    // Only initialize Vapi SDK and set up listeners on the client-side
+    if (typeof window === 'undefined') {
+      console.log("[useEffect] Running on server, skipping Vapi initialization.");
+      return;
+    }
+
     console.log("[useEffect] Vapi initialization and listener setup initiated.");
     if (!publicKey) {
       setErrorMessage("Vapi Public Key not set in environment variables. Please set NEXT_PUBLIC_VAPI_PUBLIC_KEY.");
@@ -144,6 +149,13 @@ export default function VapiInterviewBot() {
    * Effect to fetch resume content and check interview status from Firestore.
    */
   useEffect(() => {
+    // This part runs on both server and client. auth.currentUser will be null on server.
+    // Ensure Firestore access only happens client-side or when auth.currentUser is truly available.
+    if (typeof window === 'undefined') {
+      console.log("[useEffect] Running on server, skipping Firestore data fetch.");
+      return;
+    }
+
     const fetchData = async () => {
       if (!auth.currentUser) {
         setErrorMessage("Please log in to fetch your data.");
@@ -152,7 +164,7 @@ export default function VapiInterviewBot() {
         return;
       }
 
-      if (!jobId) { // Check jobId early as it's critical
+      if (!jobId) {
         setErrorMessage("Job ID is missing. Cannot fetch interview status.");
         setStatusMessage("Job ID missing.");
         setIsScanningResume(false);
@@ -182,7 +194,7 @@ export default function VapiInterviewBot() {
             setStatusMessage("Interview already completed.");
             console.log(`Interview already taken for job ID: ${jobId}`);
           } else {
-            setHasInterviewBeenTaken(false); // Ensure it's false if not taken
+            setHasInterviewBeenTaken(false);
             setStatusMessage("Ready to start interview.");
             console.log(`Interview not yet taken for job ID: ${jobId}`);
           }
@@ -193,7 +205,7 @@ export default function VapiInterviewBot() {
         }
       } catch (error) {
         console.error("Error fetching user data for interview check:", error);
-        setErrorMessage(`Error loading data: ${error}.`);
+        setErrorMessage(`Error loading data: ${(error as Error).message}.`);
         setStatusMessage(`Error loading data.`);
       } finally {
         setIsScanningResume(false); // Data loading complete
@@ -201,7 +213,7 @@ export default function VapiInterviewBot() {
     };
 
     fetchData();
-  }, [jobId]); // Dependency array: Re-run if jobId changes
+  }, [jobId]);
 
   useEffect(() => {
     if (isCallActive) {
@@ -214,52 +226,58 @@ export default function VapiInterviewBot() {
   }, [isMuted, isCallActive, isBotSpeaking]);
 
   const interviewAssistantConfig = useCallback(
-    // ... (assistant config as before, no changes needed here)
     (): CreateAssistantDTO => ({
-        model: {
-          provider: "openai",
-          model: "gpt-4o",
-          temperature: 0.7,
-          messages: [
-            {
-              role: "system",
-              content: `You are Nexus AI, a highly professional, polite, and insightful AI interviewer. Your primary goal is to conduct a **structured, in-depth job interview focused on the candidate's resume**, provided below.
+      model: {
+        provider: "openai",
+        model: "gpt-4o",
+        temperature: 0.7,
+        messages: [
+          {
+            role: "system",
+            content: `You are Nexus AI, a highly professional, polite, and insightful AI interviewer. Your primary goal is to conduct a **structured, in-depth job interview focused on the candidate's resume**, provided below.
 
-                **Interview Guidelines to ensure professionalism, natural flow, and resume-centric questioning:**
-                1.  **Warm Welcome & Introduction:** Start by warmly welcoming the candidate and inviting them to introduce themselves.
-                2.  **Resume-Driven Questioning (CRITICAL FOCUS):** Immediately after the introduction, transition to questions that are **directly and specifically derived from the candidate's resume**.
-                    * **Skills & Tech Stacks within Projects:** Your top priority is to ask about the **skills and technologies mentioned in their projects**. For each project, explore *how* specific skills (e.g., Python, JavaScript, SQL, C++, NLP) and technologies (e.g., Next.js, Firebase, AWS S3, Node.js, MongoDB, Docker, Jenkins) were applied.
-                    * **Go Beyond "What":** Instead of just asking "What did you do?", probe deeper with "How did you use X technology in Y project?", "Can you describe a challenge you faced with Z skill in project A and how you overcame it?", or "How did your use of [specific tech] contribute to the success or outcome of [project name]?"
-                    * **Connect Skills to Impact:** Ask about the impact or results of their technical contributions. For example, "You mentioned improving API response speed by 60% in AgriMitra using optimized RESTful APIs. Can you detail the optimization techniques you employed?"
-                    * **Explore Different Sections:** Ensure you draw questions from various relevant sections of the resume, such as **Projects, Technical Skills, Experience, and Certifications**. Avoid dwelling excessively on one area if there are other rich areas to explore.
-                    * **Avoid Repetition:** Actively track questions asked and information received. **Do not repeat questions or re-ask for details already discussed.** If a topic has been thoroughly explored, seamlessly transition to a new, relevant area from the resume.
-                    * **Behavioral Questions (Contextual):** You may ask behavioral questions (e.g., "Tell me about a time you had to debug a complex issue using [specific skill from resume]?") but always anchor them to a specific experience or project on their resume.
-                3.  **One Question at a Time:** Maintain a clear, conversational pace by asking only one question at a time. Allow the candidate to elaborate fully.
-                4.  **Professional Demeanor:** Maintain a consistently neutral, encouraging, and respectful tone.
-                5.  **No Interruptions:** Never interrupt the candidate while they are speaking. Listen actively and patiently.
-                6.  **Redirection:** If the conversation deviates or inappropriate language is used, gently steer it back by saying: 'Lets bring our focus back to the interview, shall we?'
-                7.  **Interview Duration:** Your overall goal is to conduct a thorough and insightful interview that lasts for **at least 20 minutes**. Manage the depth and breadth of your questions to comfortably fill this time with meaningful discussion derived from the resume.
-                8.  **Graceful Conclusion:** Conclude the interview politely once you have covered significant ground and ideally approached or surpassed the 20-minute mark, or if the candidate explicitly signals they are finished.
+              **Interview Guidelines to ensure professionalism, natural flow, and resume-centric questioning:**
+              1.  **Warm Welcome & Introduction:** Start by warmly welcoming the candidate and inviting them to introduce themselves.
+              2.  **Resume-Driven Questioning (CRITICAL FOCUS):** Immediately after the introduction, transition to questions that are **directly and specifically derived from the candidate's resume**.
+                  * **Skills & Tech Stacks within Projects:** Your top priority is to ask about the **skills and technologies mentioned in their projects**. For each project, explore *how* specific skills (e.g., Python, JavaScript, SQL, C++, NLP) and technologies (e.g., Next.js, Firebase, AWS S3, Node.js, MongoDB, Docker, Jenkins) were applied.
+                  * **Go Beyond "What":** Instead of just asking "What did you do?", probe deeper with "How did you use X technology in Y project?", "Can you describe a challenge you faced with Z skill in project A and how you overcame it?", or "How did your use of [specific tech] contribute to the success or outcome of [project name]?"
+                  * **Connect Skills to Impact:** Ask about the impact or results of their technical contributions. For example, "You mentioned improving API response speed by 60% in AgriMitra using optimized RESTful APIs. Can you detail the optimization techniques you employed?"
+                  * **Explore Different Sections:** Ensure you draw questions from various relevant sections of the resume, such as **Projects, Technical Skills, Experience, and Certifications**. Avoid dwelling excessively on one area if there are other rich areas to explore.
+                  * **Avoid Repetition:** Actively track questions asked and information received. **Do not repeat questions or re-ask for details already discussed.** If a topic has been thoroughly explored, seamlessly transition to a new, relevant area from the resume.
+                  * **Behavioral Questions (Contextual):** You may ask behavioral questions (e.g., "Tell me about a time you had to debug a complex issue using [specific skill from resume]?") but always anchor them to a specific experience or project on their resume.
+              3.  **One Question at a Time:** Maintain a clear, conversational pace by asking only one question at a time. Allow the candidate to elaborate fully.
+              4.  **Professional Demeanor:** Maintain a consistently neutral, encouraging, and respectful tone.
+              5.  **No Interruptions:** Never interrupt the candidate while they are speaking. Listen actively and patiently.
+              6.  **Redirection:** If the conversation deviates or inappropriate language is used, gently steer it back by saying: 'Lets bring our focus back to the interview, shall we?'
+              7.  **Interview Duration:** Your overall goal is to conduct a thorough and insightful interview that lasts for **at least 20 minutes**. Manage the depth and breadth of your questions to comfortably fill this time with meaningful discussion derived from the resume.
+              8.  **Graceful Conclusion:** Conclude the interview politely once you have covered significant ground and ideally approached or surpassed the 20-minute mark, or if the candidate explicitly signals they are finished.
 
-                **Candidate's Resume for your reference:**
-                ${resumeContent || "No resume content available. In this case, please conduct a professional interview focusing on general software development concepts, problem-solving, and common behavioral questions relevant to engineering roles. Still aim for the 20-minute duration."}
+              **Candidate's Resume for your reference:**
+              ${resumeContent || "No resume content available. In this case, please conduct a professional interview focusing on general software development concepts, problem-solving, and common behavioral questions relevant to engineering roles. Still aim for the 20-minute duration."}
 
-                **Crucial Directive:** Your ability to succeed in this interview hinges on your deep understanding and dynamic utilization of the provided resume to generate original, non-repetitive, and highly specific questions about their skills, tech stacks, and project contributions. Drive a rich, two-way technical discussion.`,
-            },
-          ],
-        },
-        voice: {
-          provider: "azure",
-          voiceId: "en-US-JennyNeural",
-        },
-        name: "Nexus AI Interviewer",
-        firstMessage:
-          "Hello and welcome! I'm Nexus AI. I've had a chance to review your resume, and I'm very much looking forward to learning more about your experience and skills. To start, could you please introduce yourself and tell me a bit about your background?",
-      }),
-      [resumeContent]
+              **Crucial Directive:** Your ability to succeed in this interview hinges on your deep understanding and dynamic utilization of the provided resume to generate original, non-repetitive, and highly specific questions about their skills, tech stacks, and project contributions. Drive a rich, two-way technical discussion.`,
+          },
+        ],
+      },
+      voice: {
+        provider: "azure",
+        voiceId: "en-US-JennyNeural",
+      },
+      name: "Nexus AI Interviewer",
+      firstMessage:
+        "Hello and welcome! I'm Nexus AI. I've had a chance to review your resume, and I'm very much looking forward to learning more about your experience and skills. To start, could you please introduce yourself and tell me a bit about your background?",
+    }),
+    [resumeContent]
   );
 
   const handleStartCall = async () => {
+    // Defensive checks for client-side execution
+    if (typeof window === 'undefined') {
+      setErrorMessage("Cannot start call on the server.");
+      setStatusMessage("Client-side operation only.");
+      return;
+    }
+
     if (!vapiRef.current) {
       setErrorMessage("Vapi not initialized. Please refresh.");
       setStatusMessage("Vapi not initialized.");
@@ -273,22 +291,21 @@ export default function VapiInterviewBot() {
     }
 
     if (!jobId) {
-        setErrorMessage("Job ID is missing. Cannot start interview without a job context.");
-        setStatusMessage("Job ID required.");
-        return;
+      setErrorMessage("Job ID is missing. Cannot start interview without a job context.");
+      setStatusMessage("Job ID required.");
+      return;
     }
 
-    // NEW CHECK: Prevent starting if interview has already been taken
     if (hasInterviewBeenTaken) {
-        setErrorMessage("You have already taken an interview for this job.");
-        setStatusMessage("Interview already completed.");
-        return;
+      setErrorMessage("You have already taken an interview for this job.");
+      setStatusMessage("Interview already completed.");
+      return;
     }
 
     if (!resumeContent && !window.confirm("No resume found. Do you want to proceed with a general interview for this job?")) {
-        setErrorMessage("Interview cancelled. Upload a resume for personalized questions.");
-        setStatusMessage("Interview cancelled.");
-        return;
+      setErrorMessage("Interview cancelled. Upload a resume for personalized questions.");
+      setStatusMessage("Interview cancelled.");
+      return;
     }
 
     setIsLoading(true);
@@ -297,6 +314,7 @@ export default function VapiInterviewBot() {
     console.log("[DEBUG] handleStartCall initiated. currentCallIdRef.current (before Vapi.start()):", currentCallIdRef.current);
 
     try {
+      // Access navigator.mediaDevices only on the client-side
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
@@ -318,9 +336,10 @@ export default function VapiInterviewBot() {
         setErrorMessage("Failed to start call. Call ID missing.");
         setStatusMessage("Failed to start call.");
         setIsLoading(false);
-        if (localVideoRef.current && localVideoRef.current.srcObject) {
-            (localVideoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
-            localVideoRef.current.srcObject = null;
+        // Safely stop media tracks only if window is defined (client-side)
+        if (typeof window !== 'undefined' && localVideoRef.current && localVideoRef.current.srcObject) {
+          (localVideoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
+          localVideoRef.current.srcObject = null;
         }
         currentCallIdRef.current = null;
       }
@@ -337,8 +356,8 @@ export default function VapiInterviewBot() {
 
   const handleStopCall = () => {
     if (!vapiRef.current) {
-        console.warn("[Stop Call] Vapi instance not available to stop.");
-        return;
+      console.warn("[Stop Call] Vapi instance not available to stop.");
+      return;
     }
     setIsLoading(true);
     setStatusMessage("Ending call...");
@@ -348,8 +367,8 @@ export default function VapiInterviewBot() {
 
   const handleToggleMute = () => {
     if (!vapiRef.current) {
-        console.warn("[Toggle Mute] Vapi instance not available.");
-        return;
+      console.warn("[Toggle Mute] Vapi instance not available.");
+      return;
     }
     const currentlyMuted = vapiRef.current.isMuted();
     vapiRef.current.setMuted(!currentlyMuted);
@@ -361,10 +380,10 @@ export default function VapiInterviewBot() {
     <div className="flex flex-col md:flex-row items-center justify-center min-h-screen p-6 space-y-6 md:space-y-0 md:space-x-4" style={{ backgroundColor: '#FAFAFC' }}>
       <div className="flex flex-col items-center justify-between p-6 md:p-8 min-h-[450px] w-full max-w-md rounded-2xl">
         <div className="flex flex-col items-center">
-            <div className={`w-60 h-60 rounded-full overflow-hidden border-4 border-blue-500 shadow-md flex items-center justify-center mb-4 bg-white transform transition-all duration-500
-                               ${isBotSpeaking ? 'ring-4 ring-blue-400 ring-opacity-75 animate-pulse-light scale-[1.03] shadow-blue-500/60' : 'hover:scale-[1.01]'}`}>
-                <img src="/images/bot.jpg" alt="AI Bot" className="object-cover w-full h-full" />
-            </div>
+          <div className={`w-60 h-60 rounded-full overflow-hidden border-4 border-blue-500 shadow-md flex items-center justify-center mb-4 bg-white transform transition-all duration-500
+                                ${isBotSpeaking ? 'ring-4 ring-blue-400 ring-opacity-75 animate-pulse-light scale-[1.03] shadow-blue-500/60' : 'hover:scale-[1.01]'}`}>
+            <img src="/images/bot.jpg" alt="AI Bot" className="object-cover w-full h-full" />
+          </div>
         </div>
 
         <div className="mt-auto w-full flex flex-col items-center space-y-3">
@@ -375,11 +394,11 @@ export default function VapiInterviewBot() {
               'text-green-700 bg-green-100 border-green-200'
             }`}>
             {errorMessage ? <FiAlertCircle className="w-4 h-4 mr-2" /> :
-             isScanningResume ? <FiInfo className="w-4 h-4 mr-2" /> :
-             isMuted && isCallActive ? <FiVolumeX className="w-4 h-4 mr-2" /> :
-             isBotSpeaking && isCallActive ? <FiVolume2 className="w-4 h-4 mr-2" /> :
-             isCallActive ? <FiCheckCircle className="w-4 h-4 mr-2" /> :
-             <FiInfo className="w-4 h-4 mr-2" />}
+              isScanningResume ? <FiInfo className="w-4 h-4 mr-2" /> :
+              isMuted && isCallActive ? <FiVolumeX className="w-4 h-4 mr-2" /> :
+              isBotSpeaking && isCallActive ? <FiVolume2 className="w-4 h-4 mr-2" /> :
+              isCallActive ? <FiCheckCircle className="w-4 h-4 mr-2" /> :
+              <FiInfo className="w-4 h-4 mr-2" />}
             {statusMessage}
           </p>
         </div>
@@ -387,7 +406,10 @@ export default function VapiInterviewBot() {
 
       <div className="flex flex-col items-center justify-between p-6 md:p-8 min-h-[450px] w-full max-w-md rounded-2xl">
         <div className="w-full max-w-4xl aspect-[16/12] bg-gray-100 rounded-lg overflow-hidden relative border border-gray-300 shadow-sm flex items-center justify-center">
-          <video ref={localVideoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover rounded-lg"></video>
+          {/* Render video element only if window is defined (client-side) */}
+          {typeof window !== 'undefined' && (
+            <video ref={localVideoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover rounded-lg"></video>
+          )}
           {!isCallActive && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 bg-opacity-70 text-gray-300 text-base">
               <FiCamera className="w-16 h-16 mb-2 opacity-70" />
@@ -400,10 +422,10 @@ export default function VapiInterviewBot() {
           {!isCallActive ? (
             <button
               onClick={handleStartCall}
-              disabled={isLoading || isScanningResume || !publicKey || !jobId || hasInterviewBeenTaken} // NEW: Disable if interview taken
+              disabled={isLoading || isScanningResume || !publicKey || !jobId || hasInterviewBeenTaken}
               className={`flex items-center justify-center w-16 h-16 rounded-full text-white text-xl transition duration-300 ease-in-out transform hover:scale-105 shadow-lg
                 ${
-                  isLoading || isScanningResume || !publicKey || !jobId || hasInterviewBeenTaken // Updated disabled condition
+                  isLoading || isScanningResume || !publicKey || !jobId || hasInterviewBeenTaken
                     ? "bg-gray-400 cursor-not-allowed"
                     : "bg-green-600 hover:bg-green-700 active:scale-95"
                 }`}
