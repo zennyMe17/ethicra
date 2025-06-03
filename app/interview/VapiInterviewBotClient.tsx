@@ -310,7 +310,7 @@ export default function VapiInterviewBotClient() {
     console.log("Uploading video in background...");
 
     try {
-      const res = await fetch("http://16.171.16.5/api/interview/upload/", {
+      const res = await fetch("https://16.171.16.5/api/interview/upload/", {
         method: "POST",
         body: formData,
       });
