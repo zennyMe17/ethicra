@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/app/firebase/firebaseConfig';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, collection, getDocs, updateDoc, addDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, updateDoc, addDoc, deleteDoc } from 'firebase/firestore'; // Added deleteDoc
 
 // Import Shadcn UI components and utils
 import { Button } from "@/components/ui/button";
@@ -30,11 +30,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-import { ShieldAlert, FileText, PlusCircle, MessageSquareText, Loader2, Award, Trash2, BarChart2 } from 'lucide-react';
-
-// NEW: Import the extracted component
-import InterviewReportsDialog from '@/components/InterviewReportsDialog';
-
+import { ShieldAlert, FileText, PlusCircle, MessageSquareText, Loader2, Award, Trash2, BarChart2 } from 'lucide-react'; // Added BarChart2 for reports
 
 // Define types for clarity
 interface JobPosting {
@@ -57,7 +53,6 @@ interface AppliedJobDetails {
   interviewTaken?: boolean; // Added for user dashboard, good to have consistency
 }
 
-// Moved to its own component (but defined here for completeness if not in a shared types file)
 interface InterviewReport {
   id: number;
   video: string;
@@ -88,7 +83,7 @@ interface AppUser {
   appliedJobs: {
     [jobPostingId: string]: Partial<AppliedJobDetails>; // Using Partial as discussed previously
   };
-  interviewReports?: InterviewReport[]; // To store related interview reports
+  interviewReports?: InterviewReport[]; // NEW: To store related interview reports
 }
 
 // New interface for the evaluation result (from Vapi AI)
@@ -124,7 +119,9 @@ const AdminLandingPage = () => {
 
   // Interview Report states (from Django backend)
   const [selectedApplicantReports, setSelectedApplicantReports] = useState<InterviewReport[]>([]);
-  const [isReportDialogOpen, setIsReportDialogOpen] = useState(false); // Managed by this component
+  const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
+  // Removed loadingReports state as it's now internal to the initial fetch
+  // const [loadingReports, setLoadingReports] = useState(false); // No longer needed here
 
   // State to hold all fetched interview reports from the Django backend
   const [allInterviewReports, setAllInterviewReports] = useState<InterviewReport[]>([]);
@@ -165,6 +162,7 @@ const AdminLandingPage = () => {
     if (hasFetchedAllReports) {
       return; // Already fetched, do nothing
     }
+    // setLoadingReports(true); // This might cause flickering if set globally
     try {
       const response = await fetch('http://16.171.16.5/api/interview/reports/');
       if (!response.ok) {
@@ -176,6 +174,8 @@ const AdminLandingPage = () => {
     } catch (error) {
       console.error("Error fetching interview reports:", error);
       // Optionally set an error state here to show in UI
+    } finally {
+      // setLoadingReports(false); // No longer needed globally
     }
   }, [hasFetchedAllReports]); // Dependency on hasFetchedAllReports ensures it runs only once
 
@@ -301,7 +301,7 @@ const AdminLandingPage = () => {
     }
   };
 
-  // Function: Handle deleting a job application
+  // NEW FUNCTION: Handle deleting a job application
   const handleDeleteApplication = async (userUid: string, jobPostingId: string) => {
     try {
       const userRef = doc(db, "users", userUid);
@@ -550,12 +550,12 @@ const AdminLandingPage = () => {
               <p className="text-gray-600 text-center">No job postings found.</p>
             ) : (
               jobPostings.map(job => (
-                <Card key={job.id} className={`mb-8 ${!job.isActive ? 'border-l-4 border-red-500' : 'border-l-4 border-indigo-500'}`}>
+                <Card key={job.id} className={`mb-8 ${!job.isActive ? 'border-l-4 border-red-500' : 'border-l-4 border-indigo-500'}`}> {/* Visual cue for inactive */}
                   <CardHeader>
                     <CardTitle className="text-xl">{job.companyName} - {job.jobTitle}</CardTitle>
                     <CardDescription>
                       Deadline: {new Date(job.applicationDeadline).toLocaleDateString()} | Active: {job.isActive ? 'Yes' : 'No'}
-                      {!job.isActive && <span className="text-red-600 font-semibold ml-2">(Closed)</span>}
+                      {!job.isActive && <span className="text-red-600 font-semibold ml-2">(Closed)</span>} {/* Added closed label */}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -571,7 +571,7 @@ const AdminLandingPage = () => {
                             <TableHead>Resume</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Vapi Call IDs (Job Specific)</TableHead>
-                            <TableHead>Interview Reports</TableHead>
+                            <TableHead>Interview Reports</TableHead> {/* NEW COLUMN */}
                             <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -622,6 +622,7 @@ const AdminLandingPage = () => {
                                   <span className="text-gray-500 text-sm">No Job-Specific Vapi Calls</span>
                                 )}
                               </TableCell>
+                              {/* NEW: Interview Reports Column */}
                               <TableCell>
                                 {applicant.interviewReports && applicant.interviewReports.length > 0 ? (
                                   <Button
@@ -673,6 +674,7 @@ const AdminLandingPage = () => {
                                     </Button>
                                   )}
 
+                                {/* NEW: Delete Application Button */}
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
                                     <Button variant="destructive" size="sm" className="ml-2">
@@ -708,7 +710,7 @@ const AdminLandingPage = () => {
         </main>
       </div>
 
-      {/* Vapi Call Evaluation Dialog (remains in this file as it's specific to Vapi calls here) */}
+      {/* Vapi Call Evaluation Dialog */}
       <Dialog open={isEvaluationDialogOpen} onOpenChange={setIsEvaluationDialogOpen}>
         <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
@@ -747,12 +749,64 @@ const AdminLandingPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* NEW: Render the InterviewReportsDialog component */}
-      <InterviewReportsDialog
-        isOpen={isReportDialogOpen}
-        onOpenChange={setIsReportDialogOpen}
-        reports={selectedApplicantReports}
-      />
+      {/* NEW: Interview Reports Dialog (from Django Backend) */}
+      <Dialog open={isReportDialogOpen} onOpenChange={setIsReportDialogOpen}>
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Interview Reports</DialogTitle>
+            <DialogDescription>
+              Detailed interview reports for the selected applicant.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedApplicantReports.length > 0 ? (
+            <div className="grid gap-6 py-4">
+              {selectedApplicantReports.map((report, index) => (
+                <Card key={report.id} className="border border-green-200 bg-green-50">
+                  <CardHeader>
+                    <CardTitle className="text-lg">Report #{report.id}</CardTitle>
+                    <CardDescription>
+                      Email: {report.email} | Score: {report.score !== null ? `${report.score.toFixed(2)}%` : 'N/A'} | Dominant Emotion: {report.dominant_emotion || 'N/A'}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <h5 className="font-medium mb-1">Video Links:</h5>
+                        {report.video && (
+                          <p><a href={report.video} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Original Video</a></p>
+                        )}
+                        {report.converted_video && (
+                          <p><a href={report.converted_video} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Converted Video</a></p>
+                        )}
+                      </div>
+                      <div>
+                        <h5 className="font-medium mb-1">Frame Analysis:</h5>
+                        <p>Total Frames: {report.total_frames}</p>
+                        <p>Face Frames: {report.face_frames}</p>
+                        <p>Analyzed: {report.analyzed ? 'Yes' : 'No'}</p>
+                      </div>
+                    </div>
+                    {report.emotion_summary && (
+                      <div className="mt-4">
+                        <h5 className="font-medium mb-1">Emotion Summary:</h5>
+                        <ul className="list-disc list-inside text-xs text-gray-700">
+                          {Object.entries(report.emotion_summary).map(([emotion, count]) => (
+                            <li key={emotion}>
+                              {emotion.charAt(0).toUpperCase() + emotion.slice(1)}: {count} frames
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-gray-600">No interview reports available for this applicant.</p>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
