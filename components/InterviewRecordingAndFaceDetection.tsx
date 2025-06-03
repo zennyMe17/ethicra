@@ -14,6 +14,7 @@ interface BlazeFacePrediction {
     // You can add other properties if you use them, like probability, landmarks, etc.
     // e.g., probability: number;
     // landmarks: number[][]; // based on blazeface types
+    
 }
 
 
