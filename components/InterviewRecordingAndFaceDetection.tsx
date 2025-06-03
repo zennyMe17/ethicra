@@ -1,8 +1,21 @@
 // components/InterviewRecordingAndFaceDetection.tsx
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, RefObject } from 'react';
 import * as tf from "@tensorflow/tfjs";
 import * as blazeface from "@tensorflow-models/blazeface";
 import { FiCamera, FiPhoneCall, FiPhoneOff, FiMic, FiMicOff } from "react-icons/fi"; // Added button icons
+
+// Define a type for the prediction object to explicitly handle the union type
+// This matches what TypeScript is reporting: either a number array or a Tensor1D
+type BlazeFacePredictionCoordinates = [number, number] | tf.Tensor1D;
+
+interface BlazeFacePrediction {
+    topLeft: BlazeFacePredictionCoordinates;
+    bottomRight: BlazeFacePredictionCoordinates;
+    // You can add other properties if you use them, like probability, landmarks, etc.
+    // e.g., probability: number;
+    // landmarks: number[][]; // based on blazeface types
+}
+
 
 interface InterviewRecordingAndFaceDetectionProps {
     isCallActive: boolean;
@@ -13,7 +26,7 @@ interface InterviewRecordingAndFaceDetectionProps {
     recordTime: number;
     faceCount: number;
     setFaceCount: React.Dispatch<React.SetStateAction<number>>;
-    localVideoRef: React.RefObject<HTMLVideoElement>; // Pass the ref from parent
+    localVideoRef: React.RefObject<HTMLVideoElement | null>; // Pass the ref from parent
 
     // Props for call control buttons
     isLoading: boolean;
@@ -85,28 +98,48 @@ const InterviewRecordingAndFaceDetection: React.FC<InterviewRecordingAndFaceDete
                 return;
             }
 
-            const predictions = await model.estimateFaces(localVideoRef.current, false);
+            // `estimateFaces` returns an array of `Face` objects
+            // Cast predictions to our custom interface to better handle types
+            const predictions = await model.estimateFaces(localVideoRef.current, false) as BlazeFacePrediction[];
             setFaceCount(predictions.length);
 
             const canvas = canvasRef.current;
             const ctx = canvas?.getContext("2d");
-            if (!ctx || !canvas || !localVideoRef.current) return;
+            if (!ctx || !canvas || !localVideoRef.current) {
+                animationId = requestAnimationFrame(detectFaces); // Keep requesting frames even if canvas/context isn't ready
+                return;
+            }
 
-            canvas.width = localVideoRef.current.clientWidth;
-            canvas.height = localVideoRef.current.clientHeight;
+            // Ensure canvas dimensions match video dimensions for correct drawing
+            canvas.width = localVideoRef.current.videoWidth;
+            canvas.height = localVideoRef.current.videoHeight;
+
+            // Important: Clear the canvas before drawing new rectangles
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            predictions.forEach((pred) => {
-                if (!pred.boundingBox) return;
-                const [x, y] = pred.boundingBox.topLeft;
-                const [x2, y2] = pred.boundingBox.bottomRight;
+            predictions.forEach((prediction) => {
+                // Determine if it's a Tensor1D or a number array and get the coordinates
+                let x: number, y: number, x2: number, y2: number;
+
+                if (Array.isArray(prediction.topLeft)) {
+                    [x, y] = prediction.topLeft;
+                } else {
+                    [x, y] = prediction.topLeft.arraySync(); // Use .arraySync() for Tensor1D
+                }
+
+                if (Array.isArray(prediction.bottomRight)) {
+                    [x2, y2] = prediction.bottomRight;
+                } else {
+                    [x2, y2] = prediction.bottomRight.arraySync(); // Use .arraySync() for Tensor1D
+                }
+
                 const width = x2 - x;
                 const height = y2 - y;
 
-                ctx.strokeStyle = "#6D28D9";
+                ctx.strokeStyle = "#6D28D9"; // Purple
                 ctx.lineWidth = 2;
                 ctx.strokeRect(x, y, width, height);
-                ctx.fillStyle = "rgba(109, 40, 217, 0.2)";
+                ctx.fillStyle = "rgba(109, 40, 217, 0.2)"; // Semi-transparent purple
                 ctx.fillRect(x, y, width, height);
             });
 
@@ -116,17 +149,22 @@ const InterviewRecordingAndFaceDetection: React.FC<InterviewRecordingAndFaceDete
         if (isCallActive || recording) { // Continue detecting faces if call is active or recording is ongoing
             detectFaces();
         }
-        return () => cancelAnimationFrame(animationId);
+        // Cleanup function for useEffect
+        return () => {
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+        };
     }, [model, isCallActive, recording, localVideoRef, setFaceCount]);
 
     // Handle starting/stopping recording based on isCallActive
     useEffect(() => {
         if (isCallActive && !recording) {
-            const stream = localVideoRef.current?.srcObject as MediaStream;
+            // Ensure localVideoRef.current and its srcObject are available before trying to get stream
+            const stream = localVideoRef.current?.srcObject as MediaStream | undefined;
             if (stream) {
                 onRecordingStart(stream);
             } else {
-                // This case should ideally be handled by the parent ensuring stream is available before starting call
                 console.warn("Cannot start recording: No local video stream available.");
             }
         } else if (!isCallActive && recording) {
