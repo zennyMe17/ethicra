@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/app/firebase/firebaseConfig';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, collection, getDocs, updateDoc, addDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, updateDoc, addDoc, deleteDoc } from 'firebase/firestore'; // Added deleteDoc
 
 // Import Shadcn UI components and utils
 import { Button } from "@/components/ui/button";
@@ -30,11 +30,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-import { ShieldAlert, FileText, PlusCircle, MessageSquareText, Loader2, Award, Trash2, BarChart2 } from 'lucide-react';
-
-// NEW: Import the extracted component
-import InterviewReportsDialog from '@/components/InterviewReportsDialog';
-
+import { ShieldAlert, FileText, PlusCircle, MessageSquareText, Loader2, Award, Trash2 } from 'lucide-react'; // Added Trash2 icon
 
 // Define types for clarity
 interface JobPosting {
@@ -57,29 +53,6 @@ interface AppliedJobDetails {
   interviewTaken?: boolean; // Added for user dashboard, good to have consistency
 }
 
-// Moved to its own component (but defined here for completeness if not in a shared types file)
-interface InterviewReport {
-  id: number;
-  video: string;
-  converted_video: string;
-  total_frames: number;
-  face_frames: number;
-  score: number;
-  analyzed: boolean;
-  email: string;
-  dominant_emotion: string;
-  emotion_summary: {
-    fear?: number;
-    neutral?: number;
-    happy?: number;
-    surprise?: number;
-    angry?: number;
-    sad?: number;
-    disgust?: number;
-    // Add other emotions if they can appear
-  };
-}
-
 interface AppUser {
   uid: string;
   email: string;
@@ -88,10 +61,9 @@ interface AppUser {
   appliedJobs: {
     [jobPostingId: string]: Partial<AppliedJobDetails>; // Using Partial as discussed previously
   };
-  interviewReports?: InterviewReport[]; // To store related interview reports
 }
 
-// New interface for the evaluation result (from Vapi AI)
+// New interface for the evaluation result
 interface EvaluationResult {
   evaluation: string; // The full evaluation string from OpenAI (e.g., "Evaluation: ...\nScore: .../10")
 }
@@ -115,20 +87,13 @@ const AdminLandingPage = () => {
   const [isPostingJob, setIsPostingJob] = useState(false);
   const [isNewJobDialogOpen, setIsNewJobDialogOpen] = useState(false);
 
-  // Vapi Evaluation states
+  // Evaluation states
   const [selectedTranscript, setSelectedTranscript] = useState<string | null>(null);
   const [evaluationResult, setEvaluationResult] = useState<EvaluationResult | null>(null);
   const [isEvaluationDialogOpen, setIsEvaluationDialogOpen] = useState(false);
   const [loadingEvaluation, setLoadingEvaluation] = useState(false);
   const [evaluatingCallId, setEvaluatingCallId] = useState<string | null>(null); // To track which call is being evaluated
 
-  // Interview Report states (from Django backend)
-  const [selectedApplicantReports, setSelectedApplicantReports] = useState<InterviewReport[]>([]);
-  const [isReportDialogOpen, setIsReportDialogOpen] = useState(false); // Managed by this component
-
-  // State to hold all fetched interview reports from the Django backend
-  const [allInterviewReports, setAllInterviewReports] = useState<InterviewReport[]>([]);
-  const [hasFetchedAllReports, setHasFetchedAllReports] = useState(false); // New state to track if reports have been fetched once
 
   // Auth state listener
   useEffect(() => {
@@ -160,28 +125,8 @@ const AdminLandingPage = () => {
     }
   }, [currentUser, loading]);
 
-  // Function to fetch all interview reports from Django backend - called only once
-  const fetchAllInterviewReportsOnce = useCallback(async () => {
-    if (hasFetchedAllReports) {
-      return; // Already fetched, do nothing
-    }
-    try {
-      const response = await fetch('http://16.171.16.5/api/interview/reports/');
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data: InterviewReport[] = await response.json();
-      setAllInterviewReports(data);
-      setHasFetchedAllReports(true); // Mark as fetched
-    } catch (error) {
-      console.error("Error fetching interview reports:", error);
-      // Optionally set an error state here to show in UI
-    }
-  }, [hasFetchedAllReports]); // Dependency on hasFetchedAllReports ensures it runs only once
-
   // Extract fetchData into a useCallback hook so it can be safely called from other functions
-  // IMPORTANT: Pass allInterviewReports as an argument, don't read it from state inside
-  const fetchData = useCallback(async (currentAllInterviewReports: InterviewReport[]) => {
+  const fetchData = useCallback(async () => {
     setLoadingData(true);
     try {
       const jobPostingsCollectionRef = collection(db, "jobPostings");
@@ -215,17 +160,12 @@ const AdminLandingPage = () => {
           const userData = userDoc.data();
           // Check if user has applied for this specific job
           if (userData.appliedJobs && userData.appliedJobs[jobPostingId]) {
-            const userEmail = userData.email;
-            // Filter interview reports for this specific user using the passed array
-            const relevantReports = currentAllInterviewReports.filter(report => report.email === userEmail);
-
             applicants.push({
               uid: userDoc.id,
               email: userData.email,
               name: userData.name || 'N/A',
               resumeUrl: userData.resumeUrl || undefined,
               appliedJobs: userData.appliedJobs, // Include all applied jobs for the user object
-              interviewReports: relevantReports, // Attach the filtered reports
             });
           }
         });
@@ -245,26 +185,18 @@ const AdminLandingPage = () => {
       }
       setJobPostings(fetchedJobPostings);
     } catch (error) {
-      console.error("Error fetching job postings, users, or reports:", error);
+      console.error("Error fetching job postings and users:", error);
     } finally {
       setLoadingData(false);
     }
-  }, []); // fetchData no longer depends on allInterviewReports state, preventing loop
+  }, []);
 
-  // Fetch all job postings and their applicants when admin status is confirmed
+  // Fetch all job postings and their applicants
   useEffect(() => {
     if (isAdmin) {
-      // First, fetch all reports
-      fetchAllInterviewReportsOnce();
+      fetchData();
     }
-  }, [isAdmin, fetchAllInterviewReportsOnce]);
-
-  // Once all reports are fetched, then fetch the job postings and associate them
-  useEffect(() => {
-    if (isAdmin && hasFetchedAllReports) {
-      fetchData(allInterviewReports); // Pass the already fetched reports
-    }
-  }, [isAdmin, hasFetchedAllReports, allInterviewReports, fetchData]);
+  }, [isAdmin, fetchData]);
 
 
   // Function to handle selecting user for interview for a specific job
@@ -288,20 +220,38 @@ const AdminLandingPage = () => {
           appliedJobs: updatedAppliedJobs,
         });
 
-        // Optimistically update local state by re-fetching data with the current reports
-        // Call fetchData after the update so the UI reflects the change
-        fetchData(allInterviewReports);
-
+        // Optimistically update local state
+        setJobPostings(prevJobPostings =>
+          prevJobPostings.map(job => {
+            if (job.id === jobPostingId) {
+              return {
+                ...job,
+                applicants: job.applicants.map(applicant =>
+                  applicant.uid === userUid ? {
+                    ...applicant,
+                    appliedJobs: {
+                      ...applicant.appliedJobs,
+                      [jobPostingId]: {
+                        ...applicant.appliedJobs[jobPostingId],
+                        status: 'selected_for_resume_interview'
+                      }
+                    }
+                  } : applicant
+                )
+              };
+            }
+            return job;
+          })
+        );
         console.log(`User ${userUid} selected for resume interview for job ${jobPostingId}!`);
-        alert("User selected for resume interview!");
       }
     } catch (error) {
       console.error("Error selecting user for interview:", error);
-      alert("Failed to select user for interview. Please try again.");
+      console.error("Failed to select user for interview. Please try again.");
     }
   };
 
-  // Function: Handle deleting a job application
+  // NEW FUNCTION: Handle deleting a job application
   const handleDeleteApplication = async (userUid: string, jobPostingId: string) => {
     try {
       const userRef = doc(db, "users", userUid);
@@ -316,9 +266,18 @@ const AdminLandingPage = () => {
           appliedJobs: updatedAppliedJobs,
         });
 
-        // Optimistically update local state by re-fetching data with the current reports
-        fetchData(allInterviewReports);
-
+        // Optimistically update local state
+        setJobPostings(prevJobPostings =>
+          prevJobPostings.map(job => {
+            if (job.id === jobPostingId) {
+              return {
+                ...job,
+                applicants: job.applicants.filter(applicant => applicant.uid !== userUid)
+              };
+            }
+            return job;
+          })
+        );
         console.log(`Application for user ${userUid} on job ${jobPostingId} deleted successfully.`);
         alert("Application deleted successfully!");
       }
@@ -347,20 +306,20 @@ const AdminLandingPage = () => {
       const jobPostingId = docRef.id;
 
       console.log(`Job posted successfully! Job ID: ${jobPostingId}`);
-      alert(`Job posted successfully! Job ID: ${jobPostingId}`);
+      alert(`Job posted successfully! Job ID: ${jobPostingId}`); // Temporarily using alert for demonstration
 
       setNewJob({ companyName: '', jobTitle: '', description: '', requirements: '', applicationDeadline: '' });
       setIsNewJobDialogOpen(false); // Close the dialog
-      await fetchData(allInterviewReports); // Call fetchData again after posting, passing reports
+      await fetchData(); // Call fetchData again after posting
     } catch (error) {
       console.error("Error posting job:", error);
-      alert("Failed to post job. Please try again.");
+      console.error("Failed to post job. Please try again.");
     } finally {
       setIsPostingJob(false);
     }
   };
 
-  // Function to fetch transcript and then evaluate it (from Vapi AI)
+  // NEW FUNCTION: Fetch transcript and then evaluate it
   const fetchAndEvaluateTranscript = async (callId: string) => {
     setLoadingEvaluation(true);
     setEvaluatingCallId(callId); // Set the callId being evaluated
@@ -407,12 +366,6 @@ const AdminLandingPage = () => {
       setLoadingEvaluation(false);
       setEvaluatingCallId(null); // Clear the tracking ID
     }
-  };
-
-  // Function to handle opening the interview reports dialog
-  const handleViewInterviewReports = (reports: InterviewReport[]) => {
-    setSelectedApplicantReports(reports);
-    setIsReportDialogOpen(true);
   };
 
 
@@ -550,12 +503,12 @@ const AdminLandingPage = () => {
               <p className="text-gray-600 text-center">No job postings found.</p>
             ) : (
               jobPostings.map(job => (
-                <Card key={job.id} className={`mb-8 ${!job.isActive ? 'border-l-4 border-red-500' : 'border-l-4 border-indigo-500'}`}>
+                <Card key={job.id} className={`mb-8 ${!job.isActive ? 'border-l-4 border-red-500' : 'border-l-4 border-indigo-500'}`}> {/* Visual cue for inactive */}
                   <CardHeader>
                     <CardTitle className="text-xl">{job.companyName} - {job.jobTitle}</CardTitle>
                     <CardDescription>
                       Deadline: {new Date(job.applicationDeadline).toLocaleDateString()} | Active: {job.isActive ? 'Yes' : 'No'}
-                      {!job.isActive && <span className="text-red-600 font-semibold ml-2">(Closed)</span>}
+                      {!job.isActive && <span className="text-red-600 font-semibold ml-2">(Closed)</span>} {/* Added closed label */}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -571,7 +524,6 @@ const AdminLandingPage = () => {
                             <TableHead>Resume</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Vapi Call IDs (Job Specific)</TableHead>
-                            <TableHead>Interview Reports</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -622,19 +574,6 @@ const AdminLandingPage = () => {
                                   <span className="text-gray-500 text-sm">No Job-Specific Vapi Calls</span>
                                 )}
                               </TableCell>
-                              <TableCell>
-                                {applicant.interviewReports && applicant.interviewReports.length > 0 ? (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleViewInterviewReports(applicant.interviewReports!)}
-                                  >
-                                    <BarChart2 className="mr-2 h-4 w-4" /> View {applicant.interviewReports.length} Report(s)
-                                  </Button>
-                                ) : (
-                                  <span className="text-gray-500 text-sm">No Reports</span>
-                                )}
-                              </TableCell>
                               <TableCell className="text-right space-x-2">
                                 {applicant.appliedJobs[job.id]?.status === 'applied' && (
                                   <AlertDialog>
@@ -673,6 +612,7 @@ const AdminLandingPage = () => {
                                     </Button>
                                   )}
 
+                                {/* NEW: Delete Application Button */}
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
                                     <Button variant="destructive" size="sm" className="ml-2">
@@ -708,11 +648,11 @@ const AdminLandingPage = () => {
         </main>
       </div>
 
-      {/* Vapi Call Evaluation Dialog (remains in this file as it's specific to Vapi calls here) */}
+      {/* Vapi Call Evaluation Dialog */}
       <Dialog open={isEvaluationDialogOpen} onOpenChange={setIsEvaluationDialogOpen}>
         <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Vapi Call Evaluation</DialogTitle>
+            <DialogTitle>Call Evaluation</DialogTitle>
             <DialogDescription>
               Evaluation for Vapi Call ID: <span className="font-mono text-sm">{evaluatingCallId}</span>
             </DialogDescription>
@@ -734,7 +674,7 @@ const AdminLandingPage = () => {
               )}
               {evaluationResult ? (
                 <div className="grid gap-2">
-                  <h4 className="font-semibold">Evaluation Result (Vapi AI):</h4>
+                  <h4 className="font-semibold">Evaluation Result:</h4>
                   <p className="text-sm text-gray-800 whitespace-pre-wrap bg-blue-50 p-3 rounded-md border border-blue-200">
                     {evaluationResult.evaluation}
                   </p>
@@ -746,13 +686,6 @@ const AdminLandingPage = () => {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* NEW: Render the InterviewReportsDialog component */}
-      <InterviewReportsDialog
-        isOpen={isReportDialogOpen}
-        onOpenChange={setIsReportDialogOpen}
-        reports={selectedApplicantReports}
-      />
     </div>
   );
 }
