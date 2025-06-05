@@ -42,7 +42,7 @@ const AdminLoginPage = () => {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
             console.log("Logged in with email/password:", user.uid);
-            router.push('/admin');
+            router.push('/admin/dashboard');
         } catch (firebaseError) {
             console.error("Firebase Login Error:", firebaseError);
             switch (firebaseError) {
