@@ -2,7 +2,7 @@
 
 Ethicra is an innovative, AI-powered job hiring platform engineered to make recruitment **fair**, **efficient**, and **transparent** for both job seekers and hiring organizations. By leveraging modern web technology and cloud services, Ethicra tackles common hiring challenges—including resume exaggeration, biased selection, and lengthy interview cycles—head-on.
 
-> **Developed by Hemanth S — Computer Science and Cybersecurity Engineering, Ramaiah Institute of Technology**
+> **Developed by Hemanth S and Team CodeMonks, Department of Computer Science and Cybersecurity Engineering, Ramaiah Institute of Technology**
 
 ---
 
