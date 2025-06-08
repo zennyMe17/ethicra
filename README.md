@@ -2,7 +2,7 @@
 
 Ethicra is an innovative, AI-powered job hiring platform engineered to make recruitment **fair**, **efficient**, and **transparent** for both job seekers and hiring organizations. By leveraging modern web technology and cloud services, Ethicra tackles common hiring challenges—including resume exaggeration, biased selection, and lengthy interview cycles—head-on.
 
-> **Developed by Hemanth S — Computer Science and Cybersecurity Engineering, Ramaiah Institute of Technology**
+> **Developed by Hemanth S and Team CodeMonks, Department of Computer Science and Cybersecurity Engineering, Ramaiah Institute of Technology**
 
 ---
 
@@ -72,6 +72,42 @@ Ethicra is an innovative, AI-powered job hiring platform engineered to make recr
 - **Cloud-first architecture:** Ethicra is built to scale—supporting thousands of concurrent users, hiring teams, and interview sessions.
 
 ---
+
+## ❓ FAQ (Frequently Asked Questions)
+
+### 1. What is Ethicra?
+Ethicra is an AI-powered job hiring platform designed to make recruitment fair, efficient, and transparent for both job seekers and hiring organizations. It leverages modern web technology and AI services to tackle challenges like resume exaggeration, biased selection, and lengthy interview processes.
+
+### 2. How is Ethicra different from other job portals?
+Ethicra uniquely combines AI-driven resume parsing, automated interview questions, live video integrity checks, and emotion analytics to ensure unbiased and authentic assessments for candidates. It also provides real-time dashboards and automated reporting for both applicants and admins.
+
+### 3. Is my data safe on Ethicra?
+Yes! Ethicra uses Firebase Authentication for secure login, AWS S3 for encrypted file storage, and follows best practices for user privacy and data security.
+
+### 4. What file types are supported for resume uploads?
+You can upload your resume in PDF or image formats (such as PNG, JPG).
+
+### 5. How does the AI interview work?
+If you’re shortlisted, the platform generates personalized interview questions based on your resume. You’ll interact with an AI bot through voice, and your video is recorded with live face detection for integrity (on certain deployments). Afterward, you receive an automated report with analytics and scoring.
+
+### 6. Which features require video and face detection?
+Video interview integrity and face detection are available on the main Render deployment ([https://ethicra.onrender.com/](https://ethicra.onrender.com/)). The Vercel demo does not include video integrity features.
+
+### 7. What happens after I complete an interview?
+You’ll receive a detailed report including video analytics, emotion summary, AI-generated transcript, and scoring. Admins use these unbiased reports for final selection.
+
+### 8. Who can post jobs on Ethicra?
+Only verified organizations and admins can post, edit, or close job listings. Applicants can browse and apply to all open jobs.
+
+### 9. Can I practice interviews without applying for jobs?
+Yes! The User Dashboard offers a practice interview mode so you can hone your skills in a no-risk environment.
+
+### 10. How do I contribute to Ethicra?
+Simply open an issue or submit a pull request with your feature, bug fix, or suggestion. All contributions are welcome!
+
+---
+
+*Still have questions? Feel free to open an issue or reach out via the project repository!*
 
 ## 🏁 Getting Started
 
