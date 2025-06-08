@@ -5,7 +5,7 @@ import { getAuth } from "firebase/auth"; // Import getAuth
 import { getFirestore } from "firebase/firestore"; // Import Firestore
 import { FirebaseOptions } from "firebase/app";
 
-Your Firebase config details
+//Your Firebase config details
 const firebaseConfig: FirebaseOptions = {
   apiKey: "AIzaSyCQZfnDyWs5I5vuOageLyH4Lsh0bzj6eYs",
   authDomain: "fir-auth-cca62.firebaseapp.com",
