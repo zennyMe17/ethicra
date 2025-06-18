@@ -40,7 +40,7 @@ Ethicra is an innovative, AI-powered job hiring platform engineered to make recr
 - **Admin tools**: Review applicants, shortlist, and manage interviews
 
 ### 🤖 AI-Driven Interview Experience
-- **Resume-based question generation:** LLM-powered (OpenAI) interview bot
+- **Resume-based question generation:**Handled by Vapi, which integrates LLM (OpenAI) for dynamic, personalized interview questions
 - **Voice-first:** Speech-to-text & text-to-speech for natural conversations
 - **Video integrity:** Live face-detection and recording for authenticity (Render deployment only)
 
