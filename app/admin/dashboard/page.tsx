@@ -166,7 +166,7 @@ const AdminLandingPage = () => {
             return; // Already fetched, do nothing
         }
         try {
-            const response = await fetch('https://16.170.211.86/api/interview/reports/');
+            const response = await fetch('https://13.60.17.68/api/interview/reports/');
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
